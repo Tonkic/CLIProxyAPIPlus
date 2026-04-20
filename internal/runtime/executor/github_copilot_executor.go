@@ -246,7 +246,11 @@ func (e *GitHubCopilotExecutor) Execute(ctx context.Context, auth *cliproxyauth.
 		converted = sdktranslator.TranslateNonStream(ctx, sdktranslator.FromString("codex"), from, req.Model, bytes.Clone(opts.OriginalRequest), body, data, &param)
 	} else {
 		data = normalizeGitHubCopilotReasoningField(data)
-		converted = sdktranslator.TranslateNonStream(ctx, to, from, req.Model, bytes.Clone(opts.OriginalRequest), body, data, &param)
+		fromData := to
+		if useResponses {
+			fromData = sdktranslator.FromString("codex")
+		}
+		converted = sdktranslator.TranslateNonStream(ctx, fromData, from, req.Model, bytes.Clone(opts.OriginalRequest), body, data, &param)
 	}
 	resp = cliproxyexecutor.Response{Payload: converted, Headers: httpResp.Header.Clone()}
 	reporter.ensurePublished(ctx)
@@ -1042,10 +1046,10 @@ func normalizeGitHubCopilotResponsesInput(body []byte) []byte {
 			// OpenAI Chat Completions assistant with tool_calls -> Responses API function_call items
 			if role == "assistant" && msg.Get("tool_calls").Exists() {
 				// Emit any text content first as an assistant message.
-				if content.Exists() && content.Type == gjson.String && content.String() != "" {
+				if text := collectTextFromNode(content); text != "" {
 					item := `{"type":"message","role":"assistant","content":[]}`
 					part := `{"type":"output_text","text":""}`
-					part, _ = sjson.Set(part, "text", content.String())
+					part, _ = sjson.Set(part, "text", text)
 					item, _ = sjson.SetRaw(item, "content.-1", part)
 					inputArr, _ = sjson.SetRaw(inputArr, "-1", item)
 				}
