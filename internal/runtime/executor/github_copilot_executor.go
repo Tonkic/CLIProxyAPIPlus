@@ -883,7 +883,7 @@ func normalizeGitHubCopilotSSELineReasoningField(line []byte) []byte {
 	if bytes.Equal(sseData, []byte("[DONE]")) || !gjson.ValidBytes(sseData) {
 		return normalizedLine
 	}
-	normalized := normalizeGitHubCopilotReasoningField(bytes.Clone(sseData))
+	normalized := normalizeGitHubCopilotReasoningField(sseData)
 	if bytes.Equal(normalized, sseData) {
 		return normalizedLine
 	}
@@ -1040,8 +1040,8 @@ func normalizeGitHubCopilotResponsesInput(body []byte) []byte {
 			if role == "tool" {
 				fco := `{"type":"function_call_output","call_id":"","output":""}`
 				fco, _ = sjson.Set(fco, "call_id", msg.Get("tool_call_id").String())
-				if content.Exists() {
-					fco, _ = sjson.Set(fco, "output", content.String())
+				if text := collectTextFromNode(content); text != "" {
+					fco, _ = sjson.Set(fco, "output", text)
 				}
 				inputArr, _ = sjson.SetRaw(inputArr, "-1", fco)
 				continue
@@ -1225,7 +1225,21 @@ func mapClaudeControlsToCodexReasoning(body []byte) []byte {
 
 	effort := strings.ToLower(strings.TrimSpace(gjson.GetBytes(body, "output_config.effort").String()))
 	if effort == "" {
-		return body
+		// Claude thinking.budget_tokens is another standard way to request reasoning.
+		// Map token budget to the closest codex effort tier to preserve user intent.
+		budgetTokens := gjson.GetBytes(body, "thinking.budget_tokens").Int()
+		switch {
+		case budgetTokens >= 12000:
+			effort = "xhigh"
+		case budgetTokens >= 4000:
+			effort = "high"
+		case budgetTokens >= 1000:
+			effort = "medium"
+		case budgetTokens > 0:
+			effort = "low"
+		default:
+			return body
+		}
 	}
 
 	// Convert Claude adaptive effort levels to codex reasoning levels.
