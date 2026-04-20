@@ -112,6 +112,9 @@ func (e *GitHubCopilotExecutor) Execute(ctx context.Context, auth *cliproxyauth.
 		return nativeExec.Execute(ctx, nativeAuth, nativeReq, opts)
 	}
 
+	from := opts.SourceFormat
+	useResponses := useGitHubCopilotResponsesEndpoint(from, req.Model)
+
 	apiToken, baseURL, errToken := e.ensureAPIToken(ctx, auth)
 	if errToken != nil {
 		return resp, errToken
@@ -120,8 +123,6 @@ func (e *GitHubCopilotExecutor) Execute(ctx context.Context, auth *cliproxyauth.
 	reporter := newUsageReporter(ctx, e.Identifier(), req.Model, auth)
 	defer reporter.trackFailure(ctx, &err)
 
-	from := opts.SourceFormat
-	useResponses := useGitHubCopilotResponsesEndpoint(from, req.Model)
 	to := sdktranslator.FromString("openai")
 	if useResponses {
 		to = sdktranslator.FromString("openai-response")
@@ -135,6 +136,9 @@ func (e *GitHubCopilotExecutor) Execute(ctx context.Context, auth *cliproxyauth.
 	body = e.normalizeModel(req.Model, body)
 	body = flattenAssistantContent(body)
 	body = stripUnsupportedBetas(body)
+	if useResponses && from.String() == "claude" {
+		body = mapClaudeControlsToCodexReasoning(body)
+	}
 
 	// Detect vision content before input normalization removes messages
 	hasVision := detectVisionContent(body)
@@ -157,6 +161,9 @@ func (e *GitHubCopilotExecutor) Execute(ctx context.Context, auth *cliproxyauth.
 	}
 	requestedModel := payloadRequestedModel(opts, req.Model)
 	body = applyPayloadConfigWithRoot(e.cfg, req.Model, to.String(), "", body, originalTranslated, requestedModel)
+	if useResponses {
+		body = stripGitHubCopilotResponsesUnsupportedFields(body)
+	}
 	body, _ = sjson.SetBytes(body, "stream", false)
 
 	path := githubCopilotChatPath
@@ -234,6 +241,9 @@ func (e *GitHubCopilotExecutor) Execute(ctx context.Context, auth *cliproxyauth.
 	var converted []byte
 	if useResponses && from.String() == "claude" {
 		converted = translateGitHubCopilotResponsesNonStreamToClaude(data)
+	} else if useResponses && from.String() == "openai" {
+		data = normalizeGitHubCopilotReasoningField(data)
+		converted = sdktranslator.TranslateNonStream(ctx, sdktranslator.FromString("codex"), from, req.Model, bytes.Clone(opts.OriginalRequest), body, data, &param)
 	} else {
 		data = normalizeGitHubCopilotReasoningField(data)
 		converted = sdktranslator.TranslateNonStream(ctx, to, from, req.Model, bytes.Clone(opts.OriginalRequest), body, data, &param)
@@ -251,6 +261,9 @@ func (e *GitHubCopilotExecutor) ExecuteStream(ctx context.Context, auth *cliprox
 		return nativeExec.ExecuteStream(ctx, nativeAuth, nativeReq, opts)
 	}
 
+	from := opts.SourceFormat
+	useResponses := useGitHubCopilotResponsesEndpoint(from, req.Model)
+
 	apiToken, baseURL, errToken := e.ensureAPIToken(ctx, auth)
 	if errToken != nil {
 		return nil, errToken
@@ -259,8 +272,6 @@ func (e *GitHubCopilotExecutor) ExecuteStream(ctx context.Context, auth *cliprox
 	reporter := newUsageReporter(ctx, e.Identifier(), req.Model, auth)
 	defer reporter.trackFailure(ctx, &err)
 
-	from := opts.SourceFormat
-	useResponses := useGitHubCopilotResponsesEndpoint(from, req.Model)
 	to := sdktranslator.FromString("openai")
 	if useResponses {
 		to = sdktranslator.FromString("openai-response")
@@ -274,6 +285,9 @@ func (e *GitHubCopilotExecutor) ExecuteStream(ctx context.Context, auth *cliprox
 	body = e.normalizeModel(req.Model, body)
 	body = flattenAssistantContent(body)
 	body = stripUnsupportedBetas(body)
+	if useResponses && from.String() == "claude" {
+		body = mapClaudeControlsToCodexReasoning(body)
+	}
 
 	// Detect vision content before input normalization removes messages
 	hasVision := detectVisionContent(body)
@@ -296,6 +310,9 @@ func (e *GitHubCopilotExecutor) ExecuteStream(ctx context.Context, auth *cliprox
 	}
 	requestedModel := payloadRequestedModel(opts, req.Model)
 	body = applyPayloadConfigWithRoot(e.cfg, req.Model, to.String(), "", body, originalTranslated, requestedModel)
+	if useResponses {
+		body = stripGitHubCopilotResponsesUnsupportedFields(body)
+	}
 	body, _ = sjson.SetBytes(body, "stream", true)
 	// Enable stream options for usage stats in stream
 	if !useResponses {
@@ -396,20 +413,16 @@ func (e *GitHubCopilotExecutor) ExecuteStream(ctx context.Context, auth *cliprox
 			var chunks [][]byte
 			if useResponses && from.String() == "claude" {
 				chunks = translateGitHubCopilotResponsesStreamToClaude(bytes.Clone(line), &param)
+			} else if useResponses && from.String() == "openai" {
+				// The upstream returns Responses-API SSE (event:/data: lines).
+				// Use the codex response translator to convert to Chat Completions SSE.
+				normalizedLine := normalizeGitHubCopilotSSELineReasoningField(bytes.Clone(line))
+				chunks = sdktranslator.TranslateStream(ctx, sdktranslator.FromString("codex"), from, req.Model, bytes.Clone(opts.OriginalRequest), body, normalizedLine, &param)
 			} else {
 				// Strip SSE "data: " prefix before reasoning field normalization,
 				// since normalizeGitHubCopilotReasoningField expects pure JSON.
 				// Re-wrap with the prefix afterward for the translator.
-				normalizedLine := bytes.Clone(line)
-				if bytes.HasPrefix(line, dataTag) {
-					sseData := bytes.TrimSpace(line[len(dataTag):])
-					if !bytes.Equal(sseData, []byte("[DONE]")) && gjson.ValidBytes(sseData) {
-						normalized := normalizeGitHubCopilotReasoningField(bytes.Clone(sseData))
-						if !bytes.Equal(normalized, sseData) {
-							normalizedLine = append(append([]byte(nil), dataTag...), normalized...)
-						}
-					}
-				}
+				normalizedLine := normalizeGitHubCopilotSSELineReasoningField(bytes.Clone(line))
 				chunks = sdktranslator.TranslateStream(ctx, to, from, req.Model, bytes.Clone(opts.OriginalRequest), body, normalizedLine, &param)
 			}
 			for i := range chunks {
@@ -853,6 +866,22 @@ func normalizeGitHubCopilotReasoningField(data []byte) []byte {
 	return data
 }
 
+func normalizeGitHubCopilotSSELineReasoningField(line []byte) []byte {
+	normalizedLine := bytes.Clone(line)
+	if !bytes.HasPrefix(line, dataTag) {
+		return normalizedLine
+	}
+	sseData := bytes.TrimSpace(line[len(dataTag):])
+	if bytes.Equal(sseData, []byte("[DONE]")) || !gjson.ValidBytes(sseData) {
+		return normalizedLine
+	}
+	normalized := normalizeGitHubCopilotReasoningField(bytes.Clone(sseData))
+	if bytes.Equal(normalized, sseData) {
+		return normalizedLine
+	}
+	return append(append([]byte(nil), dataTag...), normalized...)
+}
+
 func useGitHubCopilotResponsesEndpoint(sourceFormat sdktranslator.Format, model string) bool {
 	if sourceFormat.String() == "openai-response" {
 		return true
@@ -999,6 +1028,41 @@ func normalizeGitHubCopilotResponsesInput(body []byte) []byte {
 			role := msg.Get("role").String()
 			content := msg.Get("content")
 
+			// OpenAI Chat Completions "tool" role -> Responses API function_call_output
+			if role == "tool" {
+				fco := `{"type":"function_call_output","call_id":"","output":""}`
+				fco, _ = sjson.Set(fco, "call_id", msg.Get("tool_call_id").String())
+				if content.Exists() {
+					fco, _ = sjson.Set(fco, "output", content.String())
+				}
+				inputArr, _ = sjson.SetRaw(inputArr, "-1", fco)
+				continue
+			}
+
+			// OpenAI Chat Completions assistant with tool_calls -> Responses API function_call items
+			if role == "assistant" && msg.Get("tool_calls").Exists() {
+				// Emit any text content first as an assistant message.
+				if content.Exists() && content.Type == gjson.String && content.String() != "" {
+					item := `{"type":"message","role":"assistant","content":[]}`
+					part := `{"type":"output_text","text":""}`
+					part, _ = sjson.Set(part, "text", content.String())
+					item, _ = sjson.SetRaw(item, "content.-1", part)
+					inputArr, _ = sjson.SetRaw(inputArr, "-1", item)
+				}
+				// Convert each tool_call to a function_call item.
+				for _, tc := range msg.Get("tool_calls").Array() {
+					if tc.Get("type").String() != "function" {
+						continue
+					}
+					fc := `{"type":"function_call","call_id":"","name":"","arguments":""}`
+					fc, _ = sjson.Set(fc, "call_id", tc.Get("id").String())
+					fc, _ = sjson.Set(fc, "name", tc.Get("function.name").String())
+					fc, _ = sjson.Set(fc, "arguments", tc.Get("function.arguments").String())
+					inputArr, _ = sjson.SetRaw(inputArr, "-1", fc)
+				}
+				continue
+			}
+
 			if !content.Exists() {
 				continue
 			}
@@ -1127,8 +1191,44 @@ func normalizeGitHubCopilotResponsesInput(body []byte) []byte {
 }
 
 func stripGitHubCopilotResponsesUnsupportedFields(body []byte) []byte {
-	// GitHub Copilot /responses rejects service_tier, so always remove it.
-	body, _ = sjson.DeleteBytes(body, "service_tier")
+	unsupported := []string{
+		"service_tier",
+		// Claude/Anthropic request-shaping controls are not accepted by Copilot /responses.
+		"thinking",
+		"context_management",
+		"output_config",
+	}
+	for _, path := range unsupported {
+		body, _ = sjson.DeleteBytes(body, path)
+	}
+	return body
+}
+
+func mapClaudeControlsToCodexReasoning(body []byte) []byte {
+	if gjson.GetBytes(body, "reasoning.effort").Exists() {
+		return body
+	}
+
+	thinkingType := strings.ToLower(strings.TrimSpace(gjson.GetBytes(body, "thinking.type").String()))
+	if thinkingType == "disabled" {
+		body, _ = sjson.SetBytes(body, "reasoning.effort", "none")
+		return body
+	}
+
+	effort := strings.ToLower(strings.TrimSpace(gjson.GetBytes(body, "output_config.effort").String()))
+	if effort == "" {
+		return body
+	}
+
+	// Convert Claude adaptive effort levels to codex reasoning levels.
+	// "max" does not exist in codex, so use the closest higher tier "xhigh".
+	switch effort {
+	case "none", "low", "medium", "high", "xhigh", "minimal":
+		body, _ = sjson.SetBytes(body, "reasoning.effort", effort)
+	case "max":
+		body, _ = sjson.SetBytes(body, "reasoning.effort", "xhigh")
+	}
+
 	return body
 }
 

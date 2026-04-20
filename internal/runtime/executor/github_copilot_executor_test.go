@@ -122,6 +122,101 @@ func TestUseGitHubCopilotResponsesEndpoint_DefaultChat(t *testing.T) {
 	}
 }
 
+func TestGitHubCopilotExecute_ClaudeSourceCodexModelUsesResponsesEndpoint(t *testing.T) {
+	t.Parallel()
+
+	var gotPath string
+	var gotBody []byte
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		gotBody, _ = io.ReadAll(r.Body)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"resp_1","model":"gpt-5.3-codex","output":[{"type":"message","content":[{"type":"output_text","text":"ok"}]}],"usage":{"input_tokens":2,"output_tokens":1},"stop_reason":"stop"}`))
+	}))
+	defer server.Close()
+
+	e := NewGitHubCopilotExecutor(&config.Config{})
+	e.cache["gh-access-token"] = &cachedAPIToken{
+		token:       "copilot-api-token",
+		apiEndpoint: server.URL,
+		expiresAt:   time.Now().Add(time.Hour),
+	}
+	auth := &cliproxyauth.Auth{Metadata: map[string]any{"access_token": "gh-access-token"}}
+	payload := []byte(`{"model":"gpt-5.3-codex","max_tokens":64,"messages":[{"role":"user","content":"hello"}]}`)
+
+	resp, err := e.Execute(context.Background(), auth, cliproxyexecutor.Request{
+		Model:   "gpt-5.3-codex",
+		Payload: payload,
+	}, cliproxyexecutor.Options{
+		SourceFormat:    sdktranslator.FromString("claude"),
+		OriginalRequest: payload,
+	})
+	if err != nil {
+		t.Fatalf("Execute() error: %v", err)
+	}
+	if gotPath != "/responses" {
+		t.Fatalf("path = %q, want %q", gotPath, "/responses")
+	}
+	if !gjson.GetBytes(gotBody, "input").Exists() {
+		t.Fatalf("upstream body = %s, want responses input field", gotBody)
+	}
+	if gjson.GetBytes(resp.Payload, "content.0.text").String() != "ok" {
+		t.Fatalf("response text = %q, want %q", gjson.GetBytes(resp.Payload, "content.0.text").String(), "ok")
+	}
+}
+
+func TestGitHubCopilotExecuteStream_ClaudeSourceCodexModelUsesResponsesEndpoint(t *testing.T) {
+	t.Parallel()
+
+	var gotPath string
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte("data: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_1\",\"model\":\"gpt-5.3-codex\"}}\n\n"))
+		_, _ = w.Write([]byte("data: {\"type\":\"response.output_text.delta\",\"delta\":\"ok\"}\n\n"))
+		_, _ = w.Write([]byte("data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_1\",\"model\":\"gpt-5.3-codex\",\"usage\":{\"input_tokens\":1,\"output_tokens\":1},\"output\":[],\"stop_reason\":\"stop\"}}\n\n"))
+		_, _ = w.Write([]byte("data: [DONE]\n\n"))
+	}))
+	defer server.Close()
+
+	e := NewGitHubCopilotExecutor(&config.Config{})
+	e.cache["gh-access-token"] = &cachedAPIToken{
+		token:       "copilot-api-token",
+		apiEndpoint: server.URL,
+		expiresAt:   time.Now().Add(time.Hour),
+	}
+	auth := &cliproxyauth.Auth{Metadata: map[string]any{"access_token": "gh-access-token"}}
+	payload := []byte(`{"model":"gpt-5.3-codex","stream":true,"max_tokens":64,"messages":[{"role":"user","content":"hello"}]}`)
+
+	result, err := e.ExecuteStream(context.Background(), auth, cliproxyexecutor.Request{
+		Model:   "gpt-5.3-codex",
+		Payload: payload,
+	}, cliproxyexecutor.Options{
+		SourceFormat:    sdktranslator.FromString("claude"),
+		OriginalRequest: payload,
+	})
+	if err != nil {
+		t.Fatalf("ExecuteStream() error: %v", err)
+	}
+
+	var joined strings.Builder
+	for chunk := range result.Chunks {
+		if chunk.Err != nil {
+			t.Fatalf("stream chunk error: %v", chunk.Err)
+		}
+		joined.Write(chunk.Payload)
+	}
+
+	if gotPath != "/responses" {
+		t.Fatalf("path = %q, want %q", gotPath, "/responses")
+	}
+	if !strings.Contains(joined.String(), "message_start") || !strings.Contains(joined.String(), "text_delta") {
+		t.Fatalf("stream = %q, want Claude SSE payload", joined.String())
+	}
+}
+
 func TestNormalizeGitHubCopilotChatTools_KeepFunctionOnly(t *testing.T) {
 	t.Parallel()
 	body := []byte(`{"tools":[{"type":"function","function":{"name":"ok"}},{"type":"code_interpreter"}],"tool_choice":"auto"}`)
@@ -187,6 +282,99 @@ func TestNormalizeGitHubCopilotResponsesInput_StripsServiceTier(t *testing.T) {
 	}
 	if gjson.GetBytes(got, "input").String() != "user text" {
 		t.Fatalf("input = %q, want %q", gjson.GetBytes(got, "input").String(), "user text")
+	}
+}
+
+func TestStripGitHubCopilotResponsesUnsupportedFields_ClaudeControls(t *testing.T) {
+	t.Parallel()
+	body := []byte(`{"input":"x","service_tier":"default","thinking":{"type":"adaptive"},"context_management":{"edits":[]},"output_config":{"effort":"high"}}`)
+	got := stripGitHubCopilotResponsesUnsupportedFields(body)
+
+	if gjson.GetBytes(got, "service_tier").Exists() {
+		t.Fatalf("service_tier should be removed, got %s", gjson.GetBytes(got, "service_tier").Raw)
+	}
+	if gjson.GetBytes(got, "thinking").Exists() {
+		t.Fatalf("thinking should be removed, got %s", gjson.GetBytes(got, "thinking").Raw)
+	}
+	if gjson.GetBytes(got, "context_management").Exists() {
+		t.Fatalf("context_management should be removed, got %s", gjson.GetBytes(got, "context_management").Raw)
+	}
+	if gjson.GetBytes(got, "output_config").Exists() {
+		t.Fatalf("output_config should be removed, got %s", gjson.GetBytes(got, "output_config").Raw)
+	}
+	if gjson.GetBytes(got, "input").String() != "x" {
+		t.Fatalf("input = %q, want %q", gjson.GetBytes(got, "input").String(), "x")
+	}
+}
+
+func TestMapClaudeControlsToCodexReasoning_OutputConfigEffort(t *testing.T) {
+	t.Parallel()
+	body := []byte(`{"messages":[],"thinking":{"type":"adaptive"},"output_config":{"effort":"high"}}`)
+	got := mapClaudeControlsToCodexReasoning(body)
+
+	if gjson.GetBytes(got, "reasoning.effort").String() != "high" {
+		t.Fatalf("reasoning.effort = %q, want %q", gjson.GetBytes(got, "reasoning.effort").String(), "high")
+	}
+}
+
+func TestMapClaudeControlsToCodexReasoning_DisabledThinking(t *testing.T) {
+	t.Parallel()
+	body := []byte(`{"messages":[],"thinking":{"type":"disabled"}}`)
+	got := mapClaudeControlsToCodexReasoning(body)
+
+	if gjson.GetBytes(got, "reasoning.effort").String() != "none" {
+		t.Fatalf("reasoning.effort = %q, want %q", gjson.GetBytes(got, "reasoning.effort").String(), "none")
+	}
+}
+
+func TestMapClaudeControlsToCodexReasoning_MaxToXHigh(t *testing.T) {
+	t.Parallel()
+	body := []byte(`{"messages":[],"thinking":{"type":"adaptive"},"output_config":{"effort":"max"}}`)
+	got := mapClaudeControlsToCodexReasoning(body)
+
+	if gjson.GetBytes(got, "reasoning.effort").String() != "xhigh" {
+		t.Fatalf("reasoning.effort = %q, want %q", gjson.GetBytes(got, "reasoning.effort").String(), "xhigh")
+	}
+}
+
+func TestNormalizeGitHubCopilotResponsesInput_OpenAIToolCallsAndToolOutput(t *testing.T) {
+	t.Parallel()
+	body := []byte(`{"messages":[{"role":"assistant","content":"working","tool_calls":[{"id":"call_1","type":"function","function":{"name":"sum","arguments":"{\"a\":1}"}}]},{"role":"tool","tool_call_id":"call_1","content":"2"}]}`)
+	got := normalizeGitHubCopilotResponsesInput(body)
+
+	input := gjson.GetBytes(got, "input")
+	if !input.Exists() || !input.IsArray() {
+		t.Fatalf("input = %s, want array", input.Raw)
+	}
+
+	var hasAssistantMsg bool
+	var hasFunctionCall bool
+	var hasFunctionOutput bool
+	for _, item := range input.Array() {
+		switch item.Get("type").String() {
+		case "message":
+			if item.Get("role").String() == "assistant" && item.Get("content.0.text").String() == "working" {
+				hasAssistantMsg = true
+			}
+		case "function_call":
+			if item.Get("call_id").String() == "call_1" && item.Get("name").String() == "sum" {
+				hasFunctionCall = true
+			}
+		case "function_call_output":
+			if item.Get("call_id").String() == "call_1" && item.Get("output").String() == "2" {
+				hasFunctionOutput = true
+			}
+		}
+	}
+
+	if !hasAssistantMsg {
+		t.Fatal("expected assistant text message item")
+	}
+	if !hasFunctionCall {
+		t.Fatal("expected function_call item")
+	}
+	if !hasFunctionOutput {
+		t.Fatal("expected function_call_output item")
 	}
 }
 
