@@ -420,14 +420,18 @@ func (e *GitHubCopilotExecutor) ExecuteStream(ctx context.Context, auth *cliprox
 			} else if useResponses && from.String() == "openai" {
 				// The upstream returns Responses-API SSE (event:/data: lines).
 				// Use the codex response translator to convert to Chat Completions SSE.
-				normalizedLine := normalizeGitHubCopilotSSELineReasoningField(bytes.Clone(line))
+				normalizedLine := normalizeGitHubCopilotSSELineReasoningField(line)
 				chunks = sdktranslator.TranslateStream(ctx, sdktranslator.FromString("codex"), from, req.Model, bytes.Clone(opts.OriginalRequest), body, normalizedLine, &param)
 			} else {
 				// Strip SSE "data: " prefix before reasoning field normalization,
 				// since normalizeGitHubCopilotReasoningField expects pure JSON.
 				// Re-wrap with the prefix afterward for the translator.
-				normalizedLine := normalizeGitHubCopilotSSELineReasoningField(bytes.Clone(line))
-				chunks = sdktranslator.TranslateStream(ctx, to, from, req.Model, bytes.Clone(opts.OriginalRequest), body, normalizedLine, &param)
+				normalizedLine := normalizeGitHubCopilotSSELineReasoningField(line)
+				fromData := to
+				if useResponses {
+					fromData = sdktranslator.FromString("codex")
+				}
+				chunks = sdktranslator.TranslateStream(ctx, fromData, from, req.Model, bytes.Clone(opts.OriginalRequest), body, normalizedLine, &param)
 			}
 			for i := range chunks {
 				out <- cliproxyexecutor.StreamChunk{Payload: bytes.Clone(chunks[i])}
