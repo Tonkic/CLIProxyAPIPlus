@@ -420,14 +420,18 @@ func (e *GitHubCopilotExecutor) ExecuteStream(ctx context.Context, auth *cliprox
 			} else if useResponses && from.String() == "openai" {
 				// The upstream returns Responses-API SSE (event:/data: lines).
 				// Use the codex response translator to convert to Chat Completions SSE.
-				normalizedLine := normalizeGitHubCopilotSSELineReasoningField(bytes.Clone(line))
+				normalizedLine := normalizeGitHubCopilotSSELineReasoningField(line)
 				chunks = sdktranslator.TranslateStream(ctx, sdktranslator.FromString("codex"), from, req.Model, bytes.Clone(opts.OriginalRequest), body, normalizedLine, &param)
 			} else {
 				// Strip SSE "data: " prefix before reasoning field normalization,
 				// since normalizeGitHubCopilotReasoningField expects pure JSON.
 				// Re-wrap with the prefix afterward for the translator.
-				normalizedLine := normalizeGitHubCopilotSSELineReasoningField(bytes.Clone(line))
-				chunks = sdktranslator.TranslateStream(ctx, to, from, req.Model, bytes.Clone(opts.OriginalRequest), body, normalizedLine, &param)
+				normalizedLine := normalizeGitHubCopilotSSELineReasoningField(line)
+				fromData := to
+				if useResponses {
+					fromData = sdktranslator.FromString("codex")
+				}
+				chunks = sdktranslator.TranslateStream(ctx, fromData, from, req.Model, bytes.Clone(opts.OriginalRequest), body, normalizedLine, &param)
 			}
 			for i := range chunks {
 				out <- cliproxyexecutor.StreamChunk{Payload: bytes.Clone(chunks[i])}
@@ -879,7 +883,7 @@ func normalizeGitHubCopilotSSELineReasoningField(line []byte) []byte {
 	if bytes.Equal(sseData, []byte("[DONE]")) || !gjson.ValidBytes(sseData) {
 		return normalizedLine
 	}
-	normalized := normalizeGitHubCopilotReasoningField(bytes.Clone(sseData))
+	normalized := normalizeGitHubCopilotReasoningField(sseData)
 	if bytes.Equal(normalized, sseData) {
 		return normalizedLine
 	}
@@ -1036,8 +1040,8 @@ func normalizeGitHubCopilotResponsesInput(body []byte) []byte {
 			if role == "tool" {
 				fco := `{"type":"function_call_output","call_id":"","output":""}`
 				fco, _ = sjson.Set(fco, "call_id", msg.Get("tool_call_id").String())
-				if content.Exists() {
-					fco, _ = sjson.Set(fco, "output", content.String())
+				if text := collectTextFromNode(content); text != "" {
+					fco, _ = sjson.Set(fco, "output", text)
 				}
 				inputArr, _ = sjson.SetRaw(inputArr, "-1", fco)
 				continue
@@ -1221,7 +1225,21 @@ func mapClaudeControlsToCodexReasoning(body []byte) []byte {
 
 	effort := strings.ToLower(strings.TrimSpace(gjson.GetBytes(body, "output_config.effort").String()))
 	if effort == "" {
-		return body
+		// Claude thinking.budget_tokens is another standard way to request reasoning.
+		// Map token budget to the closest codex effort tier to preserve user intent.
+		budgetTokens := gjson.GetBytes(body, "thinking.budget_tokens").Int()
+		switch {
+		case budgetTokens >= 12000:
+			effort = "xhigh"
+		case budgetTokens >= 4000:
+			effort = "high"
+		case budgetTokens >= 1000:
+			effort = "medium"
+		case budgetTokens > 0:
+			effort = "low"
+		default:
+			return body
+		}
 	}
 
 	// Convert Claude adaptive effort levels to codex reasoning levels.

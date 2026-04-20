@@ -41,6 +41,23 @@ jobs:
               return;
             }
 
+            // Ensure target base branch exists before retargeting.
+            try {
+              await github.rest.repos.getBranch({
+                owner,
+                repo,
+                branch: desiredBase,
+              });
+            } catch (error) {
+              const status = error?.status || error?.response?.status;
+              if (status === 404) {
+                core.warning(`Target base branch '${desiredBase}' does not exist; skipping retarget for PR #${prNumber}.`);
+                return;
+              }
+              core.warning(`Failed to check branch '${desiredBase}' for PR #${prNumber}: ${error.message}`);
+              return;
+            }
+
             core.info(`Retargeting PR #${prNumber} base from ${baseRef} to ${desiredBase}.`);
 
             try {
@@ -51,6 +68,15 @@ jobs:
                 base: desiredBase,
               });
             } catch (error) {
+              const status = error?.status || error?.response?.status;
+              if (status === 403 || status === 401) {
+                core.warning(`No permission to retarget PR #${prNumber}. Check repository Actions workflow permissions (needs read/write).`);
+                return;
+              }
+              if (status === 422) {
+                core.warning(`Validation failed while retargeting PR #${prNumber}: ${error.message}`);
+                return;
+              }
               core.setFailed(`Failed to retarget PR #${prNumber} to ${desiredBase}: ${error.message}`);
               return;
             }

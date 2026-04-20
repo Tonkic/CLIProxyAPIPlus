@@ -337,6 +337,16 @@ func TestMapClaudeControlsToCodexReasoning_MaxToXHigh(t *testing.T) {
 	}
 }
 
+func TestMapClaudeControlsToCodexReasoning_BudgetTokensToHigh(t *testing.T) {
+	t.Parallel()
+	body := []byte(`{"messages":[],"thinking":{"type":"adaptive","budget_tokens":5000}}`)
+	got := mapClaudeControlsToCodexReasoning(body)
+
+	if gjson.GetBytes(got, "reasoning.effort").String() != "high" {
+		t.Fatalf("reasoning.effort = %q, want %q", gjson.GetBytes(got, "reasoning.effort").String(), "high")
+	}
+}
+
 func TestNormalizeGitHubCopilotResponsesInput_OpenAIToolCallsAndToolOutput(t *testing.T) {
 	t.Parallel()
 	body := []byte(`{"messages":[{"role":"assistant","content":"working","tool_calls":[{"id":"call_1","type":"function","function":{"name":"sum","arguments":"{\"a\":1}"}}]},{"role":"tool","tool_call_id":"call_1","content":"2"}]}`)
@@ -369,6 +379,58 @@ func TestNormalizeGitHubCopilotResponsesInput_OpenAIToolCallsAndToolOutput(t *te
 
 	if !hasAssistantMsg {
 		t.Fatal("expected assistant text message item")
+	}
+	if !hasFunctionCall {
+		t.Fatal("expected function_call item")
+	}
+	if !hasFunctionOutput {
+		t.Fatal("expected function_call_output item")
+	}
+}
+
+func TestNormalizeGitHubCopilotResponsesInput_ToolOutputArrayContent(t *testing.T) {
+	t.Parallel()
+	body := []byte(`{"messages":[{"role":"assistant","content":"working","tool_calls":[{"id":"call_1","type":"function","function":{"name":"sum","arguments":"{\"a\":1}"}}]},{"role":"tool","tool_call_id":"call_1","content":[{"type":"text","text":"2"}]}]}`)
+	got := normalizeGitHubCopilotResponsesInput(body)
+
+	output := gjson.GetBytes(got, "input.#(type==\"function_call_output\").output")
+	if output.String() != "2" {
+		t.Fatalf("function_call_output.output = %q, want %q", output.String(), "2")
+	}
+}
+
+func TestNormalizeGitHubCopilotResponsesInput_OpenAIToolCallsAssistantArrayContent(t *testing.T) {
+	t.Parallel()
+	body := []byte(`{"messages":[{"role":"assistant","content":[{"type":"thinking","thinking":"internal"},{"type":"text","text":"working"}],"tool_calls":[{"id":"call_1","type":"function","function":{"name":"sum","arguments":"{\"a\":1}"}}]},{"role":"tool","tool_call_id":"call_1","content":"2"}]}`)
+	got := normalizeGitHubCopilotResponsesInput(body)
+
+	input := gjson.GetBytes(got, "input")
+	if !input.Exists() || !input.IsArray() {
+		t.Fatalf("input = %s, want array", input.Raw)
+	}
+
+	var hasAssistantMsg bool
+	var hasFunctionCall bool
+	var hasFunctionOutput bool
+	for _, item := range input.Array() {
+		switch item.Get("type").String() {
+		case "message":
+			if item.Get("role").String() == "assistant" && strings.Contains(item.Get("content.0.text").String(), "working") {
+				hasAssistantMsg = true
+			}
+		case "function_call":
+			if item.Get("call_id").String() == "call_1" && item.Get("name").String() == "sum" {
+				hasFunctionCall = true
+			}
+		case "function_call_output":
+			if item.Get("call_id").String() == "call_1" && item.Get("output").String() == "2" {
+				hasFunctionOutput = true
+			}
+		}
+	}
+
+	if !hasAssistantMsg {
+		t.Fatal("expected assistant text message item from array content")
 	}
 	if !hasFunctionCall {
 		t.Fatal("expected function_call item")
