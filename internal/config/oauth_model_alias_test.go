@@ -132,7 +132,6 @@ func TestSanitizeOAuthModelAlias_InjectsDefaultGitHubCopilotAliases(t *testing.T
 	}
 	expectedAliases := []string{
 		"claude-haiku-4-5",
-		"claude-haiku-4-5-20251001",
 		"claude-opus-4-1",
 		"claude-opus-4-5",
 		"claude-opus-4-6",

@@ -30,7 +30,6 @@ func defaultKiroAliases() []OAuthModelAlias {
 func defaultGitHubCopilotAliases() []OAuthModelAlias {
 	return []OAuthModelAlias{
 		{Name: "claude-haiku-4.5", Alias: "claude-haiku-4-5", Fork: true},
-		{Name: "claude-haiku-4.5", Alias: "claude-haiku-4-5-20251001", Fork: true},
 		{Name: "claude-opus-4.1", Alias: "claude-opus-4-1", Fork: true},
 		{Name: "claude-opus-4.5", Alias: "claude-opus-4-5", Fork: true},
 		{Name: "claude-opus-4.6", Alias: "claude-opus-4-6", Fork: true},
