@@ -60,12 +60,13 @@ type RefreshEvaluator interface {
 }
 
 const (
-	refreshCheckInterval  = 5 * time.Second
-	refreshMaxConcurrency = 16
-	refreshPendingBackoff = time.Minute
-	refreshFailureBackoff = 1 * time.Minute
-	quotaBackoffBase      = time.Second
-	quotaBackoffMax       = 30 * time.Minute
+	refreshCheckInterval     = 5 * time.Second
+	refreshMaxConcurrency    = 16
+	refreshPendingBackoff    = time.Minute
+	refreshFailureBackoff    = 1 * time.Minute
+	refreshIneffectiveBackoff = 30 * time.Second
+	quotaBackoffBase         = time.Second
+	quotaBackoffMax          = 30 * time.Minute
 )
 
 var quotaCooldownDisabled atomic.Bool
