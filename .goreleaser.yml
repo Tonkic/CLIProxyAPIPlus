@@ -7,8 +7,6 @@ builds:
     goos:
       - linux
       - windows
-      - darwin
-      - freebsd
     goarch:
       - amd64
       - arm64
@@ -16,6 +14,7 @@ builds:
     binary: cli-proxy-api-plus
     ldflags:
       - -s -w -X 'main.Version={{.Version}}-plus' -X 'main.Commit={{.ShortCommit}}' -X 'main.BuildDate={{.Date}}'
+
 archives:
   - id: "cli-proxy-api-plus"
     format: tar.gz

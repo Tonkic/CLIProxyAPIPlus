@@ -1,10 +1,10 @@
-name: goreleaser
+name: release
 
 on:
   push:
-    # run only against tags
-    tags:
-      - '*'
+    branches:
+      - main
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -12,25 +12,40 @@ permissions:
 jobs:
   goreleaser:
     runs-on: ubuntu-latest
+    if: github.repository == 'Tonkic/CLIProxyAPIPlus'
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
       - name: Refresh models catalog
         run: |
           git fetch --depth 1 https://github.com/router-for-me/models.git main
           git show FETCH_HEAD:models.json > internal/registry/models/models.json
-      - run: git fetch --force --tags
-      - uses: actions/setup-go@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
         with:
           go-version: '>=1.26.0'
           cache: true
-      - name: Generate Build Metadata
+
+      - name: Create release tag
+        id: tag
+        shell: bash
         run: |
-          echo "VERSION=${GITHUB_REF_NAME}" >> $GITHUB_ENV
-          echo COMMIT=`git rev-parse --short HEAD` >> $GITHUB_ENV
-          echo BUILD_DATE=`date -u +%Y-%m-%dT%H:%M:%SZ` >> $GITHUB_ENV
-      - uses: goreleaser/goreleaser-action@v4
+          version="v$(date -u +'%Y.%m.%d')-${GITHUB_RUN_NUMBER}"
+          git tag "${version}"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "VERSION=${version}" >> "$GITHUB_ENV"
+
+      - name: Generate build metadata
+        shell: bash
+        run: |
+          echo "COMMIT=$(git rev-parse --short HEAD)" >> "$GITHUB_ENV"
+          echo "BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_ENV"
+
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v4
         with:
           distribution: goreleaser
           version: latest
