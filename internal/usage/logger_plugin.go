@@ -13,6 +13,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	coreusage "github.com/router-for-me/CLIProxyAPI/v6/sdk/cliproxy/usage"
+	log "github.com/sirupsen/logrus"
 )
 
 var statisticsEnabled atomic.Bool
@@ -48,6 +49,13 @@ func (p *LoggerPlugin) HandleUsage(ctx context.Context, record coreusage.Record)
 		return
 	}
 	p.stats.Record(ctx, record)
+	store := DefaultStore()
+	if store == nil {
+		return
+	}
+	if err := store.Insert(ctx, NormalizePersistentRecord(ctx, record)); err != nil {
+		log.Warnf("usage: failed to persist record: %v", err)
+	}
 }
 
 // SetStatisticsEnabled toggles whether in-memory statistics are recorded.
@@ -89,12 +97,15 @@ type modelStats struct {
 
 // RequestDetail stores the timestamp, latency, and token usage for a single request.
 type RequestDetail struct {
-	Timestamp time.Time  `json:"timestamp"`
-	LatencyMs int64      `json:"latency_ms"`
-	Source    string     `json:"source"`
-	AuthIndex string     `json:"auth_index"`
-	Tokens    TokenStats `json:"tokens"`
-	Failed    bool       `json:"failed"`
+	ID                 int64      `json:"id,omitempty"`
+	Timestamp          time.Time  `json:"timestamp"`
+	LatencyMs          int64      `json:"latency_ms"`
+	FirstByteLatencyMs int64      `json:"first_byte_latency_ms,omitempty"`
+	ThinkingEffort     string     `json:"thinking_effort,omitempty"`
+	Source             string     `json:"source"`
+	AuthIndex          string     `json:"auth_index"`
+	Tokens             TokenStats `json:"tokens"`
+	Failed             bool       `json:"failed"`
 }
 
 // TokenStats captures the token usage breakdown for a request.
@@ -198,12 +209,14 @@ func (s *RequestStatistics) Record(ctx context.Context, record coreusage.Record)
 		s.apis[statsKey] = stats
 	}
 	s.updateAPIStats(stats, modelName, RequestDetail{
-		Timestamp: timestamp,
-		LatencyMs: normaliseLatency(record.Latency),
-		Source:    record.Source,
-		AuthIndex: record.AuthIndex,
-		Tokens:    detail,
-		Failed:    failed,
+		Timestamp:          timestamp,
+		LatencyMs:          normaliseLatency(record.Latency),
+		FirstByteLatencyMs: normaliseLatency(record.FirstByteLatency),
+		ThinkingEffort:     strings.TrimSpace(record.ThinkingEffort),
+		Source:             record.Source,
+		AuthIndex:          record.AuthIndex,
+		Tokens:             detail,
+		Failed:             failed,
 	})
 
 	s.requestsByDay[dayKey]++
@@ -399,6 +412,40 @@ func dedupKey(apiName, modelName string, detail RequestDetail) string {
 	)
 }
 
+func NormalizePersistentRecord(ctx context.Context, record coreusage.Record) PersistentRecord {
+	timestamp := record.RequestedAt
+	if timestamp.IsZero() {
+		timestamp = time.Now()
+	}
+	failed := record.Failed
+	if !failed {
+		failed = !resolveSuccess(ctx)
+	}
+	modelName := strings.TrimSpace(record.Model)
+	if modelName == "" {
+		modelName = "unknown"
+	}
+	apiKey := strings.TrimSpace(record.APIKey)
+	if apiKey == "" {
+		apiKey = resolveAPIIdentifier(ctx, record)
+	}
+	return PersistentRecord{
+		Provider:           strings.TrimSpace(record.Provider),
+		Model:              modelName,
+		APIKey:             apiKey,
+		AuthID:             strings.TrimSpace(record.AuthID),
+		AuthIndex:          strings.TrimSpace(record.AuthIndex),
+		AuthType:           strings.TrimSpace(record.AuthType),
+		Source:             strings.TrimSpace(record.Source),
+		RequestedAt:        timestamp,
+		LatencyMs:          normaliseLatency(record.Latency),
+		FirstByteLatencyMs: normaliseLatency(record.FirstByteLatency),
+		ThinkingEffort:     strings.TrimSpace(record.ThinkingEffort),
+		Failed:             failed,
+		Tokens:             normaliseDetail(record.Detail),
+	}
+}
+
 func resolveAPIIdentifier(ctx context.Context, record coreusage.Record) string {
 	if ctx != nil {
 		if ginCtx, ok := ctx.Value("gin").(*gin.Context); ok && ginCtx != nil {
@@ -466,6 +513,92 @@ func normaliseTokenStats(tokens TokenStats) TokenStats {
 		tokens.TotalTokens = tokens.InputTokens + tokens.OutputTokens + tokens.ReasoningTokens + tokens.CachedTokens
 	}
 	return tokens
+}
+
+func SnapshotFromPersistentRecords(records []PersistentRecord) StatisticsSnapshot {
+	stats := NewRequestStatistics()
+	for _, record := range records {
+		detail := RequestDetail{
+			ID:                 record.ID,
+			Timestamp:          record.RequestedAt,
+			LatencyMs:          record.LatencyMs,
+			FirstByteLatencyMs: record.FirstByteLatencyMs,
+			ThinkingEffort:     record.ThinkingEffort,
+			Source:             record.Source,
+			AuthIndex:          record.AuthIndex,
+			Tokens:             normaliseTokenStats(record.Tokens),
+			Failed:             record.Failed,
+		}
+		apiName := strings.TrimSpace(record.APIKey)
+		if apiName == "" {
+			apiName = strings.TrimSpace(record.Provider)
+		}
+		if apiName == "" {
+			apiName = "unknown"
+		}
+		modelName := strings.TrimSpace(record.Model)
+		if modelName == "" {
+			modelName = "unknown"
+		}
+		stats.mu.Lock()
+		apiStatsValue, ok := stats.apis[apiName]
+		if !ok {
+			apiStatsValue = &apiStats{Models: make(map[string]*modelStats)}
+			stats.apis[apiName] = apiStatsValue
+		}
+		stats.recordImported(apiName, modelName, apiStatsValue, detail)
+		stats.mu.Unlock()
+	}
+	return stats.Snapshot()
+}
+
+func APIKeyUsageFromPersistentRecords(records []PersistentRecord) APIKeyUsageSnapshot {
+	snapshot := APIKeyUsageSnapshot{APIKeys: make(map[string]APIKeyUsage)}
+	for _, record := range records {
+		key := strings.TrimSpace(record.APIKey)
+		if key == "" {
+			key = strings.TrimSpace(record.Source)
+		}
+		if key == "" {
+			key = strings.TrimSpace(record.Provider)
+		}
+		if key == "" {
+			key = "unknown"
+		}
+		modelName := strings.TrimSpace(record.Model)
+		if modelName == "" {
+			modelName = "unknown"
+		}
+		entry := snapshot.APIKeys[key]
+		if entry.Models == nil {
+			entry.Models = make(map[string]ModelSnapshot)
+		}
+		entry.TotalRequests++
+		if record.Failed {
+			entry.FailureCount++
+		} else {
+			entry.SuccessCount++
+		}
+		tokens := normaliseTokenStats(record.Tokens)
+		entry.TotalTokens += tokens.TotalTokens
+		modelSnapshot := entry.Models[modelName]
+		modelSnapshot.TotalRequests++
+		modelSnapshot.TotalTokens += tokens.TotalTokens
+		modelSnapshot.Details = append(modelSnapshot.Details, RequestDetail{
+			ID:                 record.ID,
+			Timestamp:          record.RequestedAt,
+			LatencyMs:          record.LatencyMs,
+			FirstByteLatencyMs: record.FirstByteLatencyMs,
+			ThinkingEffort:     record.ThinkingEffort,
+			Source:             record.Source,
+			AuthIndex:          record.AuthIndex,
+			Tokens:             tokens,
+			Failed:             record.Failed,
+		})
+		entry.Models[modelName] = modelSnapshot
+		snapshot.APIKeys[key] = entry
+	}
+	return snapshot
 }
 
 func normaliseLatency(latency time.Duration) int64 {
