@@ -30,18 +30,17 @@ func (h *Handler) GetUsageStatistics(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	if hasRange {
-		store := usage.DefaultStore()
-		if store == nil {
-			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "usage store unavailable"})
-			return
-		}
+	store := usage.DefaultStore()
+	if store != nil {
 		records, err := store.Query(c.Request.Context(), query)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to query usage"})
 			return
 		}
 		snapshot = usage.SnapshotFromPersistentRecords(records)
+	} else if hasRange {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "usage store unavailable"})
+		return
 	} else if h != nil && h.usageStats != nil {
 		snapshot = h.usageStats.Snapshot()
 	}

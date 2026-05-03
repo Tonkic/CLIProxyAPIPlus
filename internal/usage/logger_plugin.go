@@ -53,7 +53,7 @@ func (p *LoggerPlugin) HandleUsage(ctx context.Context, record coreusage.Record)
 	if store == nil {
 		return
 	}
-	if err := store.Insert(ctx, NormalizePersistentRecord(ctx, record)); err != nil {
+	if err := store.Insert(context.Background(), NormalizePersistentRecord(ctx, record)); err != nil {
 		log.Warnf("usage: failed to persist record: %v", err)
 	}
 }
