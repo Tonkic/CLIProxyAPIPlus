@@ -55,14 +55,26 @@ jobs:
           for target in linux_amd64 linux_arm64 windows_amd64 windows_arm64; do
             GH_TOKEN="${GITHUB_TOKEN}" gh release download "${KEEPER_VERSION}" --repo Willxup/cpa-usage-keeper --pattern "cpa-usage-keeper_${KEEPER_VERSION}_${target}.*" --dir /tmp/keeper
           done
-          tar -xzf /tmp/keeper/cpa-usage-keeper_${KEEPER_VERSION}_linux_amd64.tar.gz -C /tmp/keeper
-          cp /tmp/keeper/cpa-usage-keeper_${KEEPER_VERSION}_linux_amd64/cpa-usage-keeper dist/keeper/linux/amd64/cpa-usage-keeper
-          tar -xzf /tmp/keeper/cpa-usage-keeper_${KEEPER_VERSION}_linux_arm64.tar.gz -C /tmp/keeper
-          cp /tmp/keeper/cpa-usage-keeper_${KEEPER_VERSION}_linux_arm64/cpa-usage-keeper dist/keeper/linux/arm64/cpa-usage-keeper
-          unzip -q /tmp/keeper/cpa-usage-keeper_${KEEPER_VERSION}_windows_amd64.zip -d /tmp/keeper
-          cp /tmp/keeper/cpa-usage-keeper_${KEEPER_VERSION}_windows_amd64/cpa-usage-keeper.exe dist/keeper/windows/amd64/cpa-usage-keeper.exe
-          unzip -q /tmp/keeper/cpa-usage-keeper_${KEEPER_VERSION}_windows_arm64.zip -d /tmp/keeper
-          cp /tmp/keeper/cpa-usage-keeper_${KEEPER_VERSION}_windows_arm64/cpa-usage-keeper.exe dist/keeper/windows/arm64/cpa-usage-keeper.exe
+          for target in linux_amd64 linux_arm64; do
+            workdir="/tmp/keeper/${target}"
+            mkdir -p "${workdir}"
+            tar -xzf "/tmp/keeper/cpa-usage-keeper_${KEEPER_VERSION}_${target}.tar.gz" -C "${workdir}"
+            keeper_bin=$(find "${workdir}" -type f -name cpa-usage-keeper | head -n 1)
+            test -n "${keeper_bin}"
+            os=${target%_*}
+            arch=${target#*_}
+            cp "${keeper_bin}" "dist/keeper/${os}/${arch}/cpa-usage-keeper"
+          done
+          for target in windows_amd64 windows_arm64; do
+            workdir="/tmp/keeper/${target}"
+            mkdir -p "${workdir}"
+            unzip -q "/tmp/keeper/cpa-usage-keeper_${KEEPER_VERSION}_${target}.zip" -d "${workdir}"
+            keeper_bin=$(find "${workdir}" -type f -name cpa-usage-keeper.exe | head -n 1)
+            test -n "${keeper_bin}"
+            os=${target%_*}
+            arch=${target#*_}
+            cp "${keeper_bin}" "dist/keeper/${os}/${arch}/cpa-usage-keeper.exe"
+          done
 
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v4
