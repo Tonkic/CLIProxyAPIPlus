@@ -44,6 +44,26 @@ jobs:
           echo "COMMIT=$(git rev-parse --short HEAD)" >> "$GITHUB_ENV"
           echo "BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_ENV"
 
+      - name: Download CPA Usage Keeper binaries
+        shell: bash
+        env:
+          KEEPER_VERSION: v1.4.0
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/keeper dist/keeper/linux/amd64 dist/keeper/linux/arm64 dist/keeper/windows/amd64 dist/keeper/windows/arm64
+          for target in linux_amd64 linux_arm64 windows_amd64 windows_arm64; do
+            GH_TOKEN="${GITHUB_TOKEN}" gh release download "${KEEPER_VERSION}" --repo Willxup/cpa-usage-keeper --pattern "cpa-usage-keeper_${KEEPER_VERSION}_${target}.*" --dir /tmp/keeper
+          done
+          tar -xzf /tmp/keeper/cpa-usage-keeper_${KEEPER_VERSION}_linux_amd64.tar.gz -C /tmp/keeper
+          cp /tmp/keeper/cpa-usage-keeper_${KEEPER_VERSION}_linux_amd64/cpa-usage-keeper dist/keeper/linux/amd64/cpa-usage-keeper
+          tar -xzf /tmp/keeper/cpa-usage-keeper_${KEEPER_VERSION}_linux_arm64.tar.gz -C /tmp/keeper
+          cp /tmp/keeper/cpa-usage-keeper_${KEEPER_VERSION}_linux_arm64/cpa-usage-keeper dist/keeper/linux/arm64/cpa-usage-keeper
+          unzip -q /tmp/keeper/cpa-usage-keeper_${KEEPER_VERSION}_windows_amd64.zip -d /tmp/keeper
+          cp /tmp/keeper/cpa-usage-keeper_${KEEPER_VERSION}_windows_amd64/cpa-usage-keeper.exe dist/keeper/windows/amd64/cpa-usage-keeper.exe
+          unzip -q /tmp/keeper/cpa-usage-keeper_${KEEPER_VERSION}_windows_arm64.zip -d /tmp/keeper
+          cp /tmp/keeper/cpa-usage-keeper_${KEEPER_VERSION}_windows_arm64/cpa-usage-keeper.exe dist/keeper/windows/arm64/cpa-usage-keeper.exe
+
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v4
         with:

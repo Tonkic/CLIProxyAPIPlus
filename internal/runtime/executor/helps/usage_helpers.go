@@ -18,6 +18,7 @@ import (
 type UsageReporter struct {
 	provider    string
 	model       string
+	alias       string
 	authID      string
 	authIndex   string
 	authType    string
@@ -29,9 +30,14 @@ type UsageReporter struct {
 
 func NewUsageReporter(ctx context.Context, provider, model string, auth *cliproxyauth.Auth) *UsageReporter {
 	apiKey := APIKeyFromContext(ctx)
+	alias := usage.RequestedModelAliasFromContext(ctx)
+	if alias == "" {
+		alias = model
+	}
 	reporter := &UsageReporter{
 		provider:    provider,
 		model:       model,
+		alias:       strings.TrimSpace(alias),
 		requestedAt: time.Now(),
 		apiKey:      apiKey,
 		source:      resolveUsageSource(auth, apiKey),
@@ -49,15 +55,26 @@ func (r *UsageReporter) Publish(ctx context.Context, detail usage.Detail) {
 }
 
 func (r *UsageReporter) PublishAdditionalModel(ctx context.Context, model string, detail usage.Detail) {
-	if r == nil {
+	record, ok := r.buildAdditionalModelRecord(model, detail)
+	if !ok {
 		return
+	}
+	usage.PublishRecord(ctx, record)
+}
+
+func (r *UsageReporter) buildAdditionalModelRecord(model string, detail usage.Detail) (usage.Record, bool) {
+	if r == nil {
+		return usage.Record{}, false
 	}
 	model = strings.TrimSpace(model)
 	if model == "" {
-		return
+		return usage.Record{}, false
 	}
 	detail = normalizeUsageDetailTotal(detail)
-	usage.PublishRecord(ctx, r.buildRecordForModel(model, detail, false))
+	if !hasNonZeroTokenUsage(detail) {
+		return usage.Record{}, false
+	}
+	return r.buildRecordForModel(model, detail, false), true
 }
 
 func (r *UsageReporter) PublishFailure(ctx context.Context) {
@@ -93,6 +110,14 @@ func normalizeUsageDetailTotal(detail usage.Detail) usage.Detail {
 	return detail
 }
 
+func hasNonZeroTokenUsage(detail usage.Detail) bool {
+	return detail.InputTokens != 0 ||
+		detail.OutputTokens != 0 ||
+		detail.ReasoningTokens != 0 ||
+		detail.CachedTokens != 0 ||
+		detail.TotalTokens != 0
+}
+
 // ensurePublished guarantees that a usage record is emitted exactly once.
 // It is safe to call multiple times; only the first call wins due to once.Do.
 // This is used to ensure request counting even when upstream responses do not
@@ -120,6 +145,7 @@ func (r *UsageReporter) buildRecordForModel(model string, detail usage.Detail, f
 	return usage.Record{
 		Provider:    r.provider,
 		Model:       model,
+		Alias:       r.alias,
 		Source:      r.source,
 		APIKey:      r.apiKey,
 		AuthID:      r.authID,
@@ -370,12 +396,22 @@ func parseGeminiFamilyUsageDetail(node gjson.Result) usage.Detail {
 	return detail
 }
 
+func hasGeminiFamilyUsageTokenFields(node gjson.Result) bool {
+	return node.Get("promptTokenCount").Exists() ||
+		node.Get("candidatesTokenCount").Exists() ||
+		node.Get("thoughtsTokenCount").Exists() ||
+		node.Get("totalTokenCount").Exists() ||
+		node.Get("cachedContentTokenCount").Exists()
+}
+
 func ParseGeminiCLIUsage(data []byte) usage.Detail {
 	usageNode := gjson.ParseBytes(data)
-	node := usageNode.Get("response.usageMetadata")
-	if !node.Exists() {
-		node = usageNode.Get("response.usage_metadata")
-	}
+	node := firstExistingUsageNode(usageNode,
+		"response.usageMetadata",
+		"response.usage_metadata",
+		"usageMetadata",
+		"usage_metadata",
+	)
 	if !node.Exists() {
 		return usage.Detail{}
 	}
@@ -414,14 +450,30 @@ func ParseGeminiCLIStreamUsage(line []byte) (usage.Detail, bool) {
 	if len(payload) == 0 || !gjson.ValidBytes(payload) {
 		return usage.Detail{}, false
 	}
-	node := gjson.GetBytes(payload, "response.usageMetadata")
-	if !node.Exists() {
-		node = gjson.GetBytes(payload, "usage_metadata")
-	}
+	root := gjson.ParseBytes(payload)
+	node := firstExistingUsageNode(root,
+		"response.usageMetadata",
+		"response.usage_metadata",
+		"usageMetadata",
+		"usage_metadata",
+	)
 	if !node.Exists() {
 		return usage.Detail{}, false
 	}
+	if !hasGeminiFamilyUsageTokenFields(node) {
+		return usage.Detail{}, false
+	}
 	return parseGeminiFamilyUsageDetail(node), true
+}
+
+func firstExistingUsageNode(root gjson.Result, paths ...string) gjson.Result {
+	for _, path := range paths {
+		node := root.Get(path)
+		if node.Exists() {
+			return node
+		}
+	}
+	return gjson.Result{}
 }
 
 func ParseAntigravityUsage(data []byte) usage.Detail {
