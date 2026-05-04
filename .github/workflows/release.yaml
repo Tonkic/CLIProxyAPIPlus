@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: 'Release version, for example v6.10.0'
+        description: 'Release version, for example v6.10.9.1'
         required: true
         type: string
 
@@ -49,7 +49,7 @@ jobs:
           else
             version="${GITHUB_REF_NAME}"
           fi
-          if [[ ! "${version}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.-]+)?$ ]]; then
+          if [[ ! "${version}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.-]+)?$ ]]; then
             echo "Invalid release version: ${version}" >&2
             exit 1
           fi
@@ -72,7 +72,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
-          mkdir -p /tmp/keeper .keeper-dist/linux/amd64 .keeper-dist/linux/arm64 .keeper-dist/windows/amd64 .keeper-dist/windows/arm64
+          mkdir -p /tmp/keeper .keeper-dist/linux/amd64/keeper .keeper-dist/linux/arm64/keeper .keeper-dist/windows/amd64/keeper .keeper-dist/windows/arm64/keeper
           for target in linux_amd64 linux_arm64 windows_amd64 windows_arm64; do
             GH_TOKEN="${GITHUB_TOKEN}" gh release download "${KEEPER_VERSION}" --repo Willxup/cpa-usage-keeper --pattern "cpa-usage-keeper_${KEEPER_VERSION}_${target}.*" --dir /tmp/keeper
           done
@@ -84,7 +84,7 @@ jobs:
             test -n "${keeper_bin}"
             os=${target%_*}
             arch=${target#*_}
-            cp "${keeper_bin}" ".keeper-dist/${os}/${arch}/cpa-usage-keeper"
+            cp "${keeper_bin}" ".keeper-dist/${os}/${arch}/keeper/cpa-usage-keeper"
           done
           for target in windows_amd64 windows_arm64; do
             workdir="/tmp/keeper/${target}"
@@ -94,7 +94,7 @@ jobs:
             test -n "${keeper_bin}"
             os=${target%_*}
             arch=${target#*_}
-            cp "${keeper_bin}" ".keeper-dist/${os}/${arch}/cpa-usage-keeper.exe"
+            cp "${keeper_bin}" ".keeper-dist/${os}/${arch}/keeper/cpa-usage-keeper.exe"
           done
 
       - name: Run GoReleaser

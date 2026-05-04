@@ -35,8 +35,8 @@ archives:
       - update-windows.ps1
       - src: keeper/.env.example
         dst: keeper/.env.example
-      - src: .keeper-dist/{{ .Os }}/{{ .Arch }}/cpa-usage-keeper{{ if eq .Os "windows" }}.exe{{ end }}
-        dst: keeper/cpa-usage-keeper{{ if eq .Os "windows" }}.exe{{ end }}
+      - src: .keeper-dist/{{ .Os }}/{{ .Arch }}/keeper
+        dst: keeper
 
 checksum:
   name_template: 'checksums.txt'

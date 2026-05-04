@@ -86,7 +86,7 @@ cd /opt/CLIProxyAPIPlus
 安装指定版本，或只更新不重启：
 
 ```bash
-./update-linux.sh --tag v6.10.0
+./update-linux.sh --tag v6.10.9.1
 ./update-linux.sh --no-restart
 ```
 
@@ -100,7 +100,7 @@ Windows 可以在 release 目录使用 PowerShell updater：
 
 ```powershell
 .\update-windows.ps1
-.\update-windows.ps1 -Tag v6.10.0
+.\update-windows.ps1 -Tag v6.10.9.1
 .\update-windows.ps1 -NoRestart
 ```
 
@@ -159,7 +159,7 @@ go test ./...
 
 ## Release
 
-版本化 release 使用类似 `v6.10.0` 的 tag 发布，也可以在 GitHub Actions 中手动输入版本号触发 release workflow。
+版本化 release 使用“上游版本 + Plus 发布计数”的 tag，例如 `v6.10.9.1`、`v6.10.9.2`。当上游版本更新时，Plus 计数重新从 1 开始，例如 `v6.10.10.1`。
 
 Release workflow 会构建 Linux 和 Windows 的 amd64/arm64 压缩包，并包含 updater 脚本和 CPA Usage Keeper 辅助文件。
 

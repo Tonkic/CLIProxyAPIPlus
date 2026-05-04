@@ -86,7 +86,7 @@ cd /opt/CLIProxyAPIPlus
 Install a specific version, or update without restarting:
 
 ```bash
-./update-linux.sh --tag v6.10.0
+./update-linux.sh --tag v6.10.9.1
 ./update-linux.sh --no-restart
 ```
 
@@ -100,7 +100,7 @@ On Windows, use the PowerShell updater from the release directory:
 
 ```powershell
 .\update-windows.ps1
-.\update-windows.ps1 -Tag v6.10.0
+.\update-windows.ps1 -Tag v6.10.9.1
 .\update-windows.ps1 -NoRestart
 ```
 
@@ -159,9 +159,9 @@ go test ./...
 
 ## Release
 
-Versioned releases are published from tags such as `v6.10.0`, or by manually running the release workflow with a version input.
+Versioned releases use the upstream version plus a Plus release counter, for example `v6.10.9.1` and `v6.10.9.2`. When the upstream version changes, the Plus counter resets, for example `v6.10.10.1`.
 
-The release workflow builds Linux and Windows archives for amd64 and arm64, and includes the updater script plus CPA Usage Keeper helper files.
+The release workflow builds Linux and Windows archives for amd64 and arm64, and includes the updater scripts plus CPA Usage Keeper helper files.
 
 ## License
 
