@@ -31,6 +31,8 @@ archives:
       - config.example.yaml
       - start-plus-with-keeper.ps1
       - start-plus-with-keeper.sh
+      - update-linux.sh
+      - update-windows.ps1
       - src: keeper/.env.example
         dst: keeper/.env.example
       - src: .keeper-dist/{{ .Os }}/{{ .Arch }}/cpa-usage-keeper{{ if eq .Os "windows" }}.exe{{ end }}

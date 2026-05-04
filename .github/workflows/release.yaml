@@ -2,9 +2,14 @@ name: release
 
 on:
   push:
-    branches:
-      - main
+    tags:
+      - 'v*'
   workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version, for example v6.10.0'
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -29,12 +34,28 @@ jobs:
           go-version: '>=1.26.0'
           cache: true
 
-      - name: Create release tag
+      - name: Resolve release version
         id: tag
         shell: bash
+        env:
+          INPUT_VERSION: ${{ github.event.inputs.version }}
         run: |
-          version="v$(date -u +'%Y.%m.%d')-${GITHUB_RUN_NUMBER}"
-          git tag "${version}"
+          set -euo pipefail
+          if [ "${GITHUB_EVENT_NAME}" = "workflow_dispatch" ]; then
+            version="${INPUT_VERSION}"
+            if [[ "${version}" != v* ]]; then
+              version="v${version}"
+            fi
+          else
+            version="${GITHUB_REF_NAME}"
+          fi
+          if [[ ! "${version}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.-]+)?$ ]]; then
+            echo "Invalid release version: ${version}" >&2
+            exit 1
+          fi
+          if ! git rev-parse -q --verify "refs/tags/${version}" >/dev/null; then
+            git tag "${version}"
+          fi
           echo "version=${version}" >> "$GITHUB_OUTPUT"
           echo "VERSION=${version}" >> "$GITHUB_ENV"
 
