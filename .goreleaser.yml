@@ -33,7 +33,7 @@ archives:
       - start-plus-with-keeper.sh
       - src: keeper/.env.example
         dst: keeper/.env.example
-      - src: dist/keeper/{{ .Os }}/{{ .Arch }}/cpa-usage-keeper{{ if eq .Os "windows" }}.exe{{ end }}
+      - src: .keeper-dist/{{ .Os }}/{{ .Arch }}/cpa-usage-keeper{{ if eq .Os "windows" }}.exe{{ end }}
         dst: keeper/cpa-usage-keeper{{ if eq .Os "windows" }}.exe{{ end }}
 
 checksum:
