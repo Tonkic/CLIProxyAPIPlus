@@ -18,6 +18,8 @@ builds:
 archives:
   - id: "cli-proxy-api-plus"
     format: tar.gz
+    name_template: >-
+      {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{- if eq .Arch "arm64" -}}aarch64{{- else -}}{{ .Arch }}{{- end -}}
     format_overrides:
       - goos: windows
         format: zip
@@ -25,7 +27,14 @@ archives:
       - LICENSE
       - README.md
       - README_CN.md
+      - README_JA.md
       - config.example.yaml
+      - start-plus-with-keeper.ps1
+      - start-plus-with-keeper.sh
+      - src: keeper/.env.example
+        dst: keeper/.env.example
+      - src: dist/keeper/{{ .Os }}/{{ .Arch }}/cpa-usage-keeper{{ if eq .Os "windows" }}.exe{{ end }}
+        dst: keeper/cpa-usage-keeper{{ if eq .Os "windows" }}.exe{{ end }}
 
 checksum:
   name_template: 'checksums.txt'

@@ -2,170 +2,54 @@ package management
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/router-for-me/CLIProxyAPI/v6/internal/usage"
+	"github.com/router-for-me/CLIProxyAPI/v6/internal/redisqueue"
 )
 
-type usageExportPayload struct {
-	Version    int                      `json:"version"`
-	ExportedAt time.Time                `json:"exported_at"`
-	Usage      usage.StatisticsSnapshot `json:"usage"`
+type usageQueueRecord []byte
+
+func (r usageQueueRecord) MarshalJSON() ([]byte, error) {
+	if json.Valid(r) {
+		return append([]byte(nil), r...), nil
+	}
+	return json.Marshal(string(r))
 }
 
-type usageImportPayload struct {
-	Version int                      `json:"version"`
-	Usage   usage.StatisticsSnapshot `json:"usage"`
-}
-
-// GetUsageStatistics returns usage statistics while preserving the legacy response wrapper.
-func (h *Handler) GetUsageStatistics(c *gin.Context) {
-	var snapshot usage.StatisticsSnapshot
-	query, hasRange, err := parseUsageQuery(c)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		return
-	}
-	store := usage.DefaultStore()
-	if store != nil {
-		records, err := store.Query(c.Request.Context(), query)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to query usage"})
-			return
-		}
-		snapshot = usage.SnapshotFromPersistentRecords(records)
-	} else if hasRange {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "usage store unavailable"})
-		return
-	} else if h != nil && h.usageStats != nil {
-		snapshot = h.usageStats.Snapshot()
-	}
-	c.JSON(http.StatusOK, gin.H{
-		"usage":           snapshot,
-		"failed_requests": snapshot.FailureCount,
-	})
-}
-
-func (h *Handler) DeleteUsageStatistics(c *gin.Context) {
-	store := usage.DefaultStore()
-	if store == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "usage store unavailable"})
-		return
-	}
-	var payload struct {
-		IDs []int64 `json:"ids"`
-	}
-	if err := c.ShouldBindJSON(&payload); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid json"})
-		return
-	}
-	result, err := store.Delete(c.Request.Context(), payload.IDs)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to delete usage records"})
-		return
-	}
-	c.JSON(http.StatusOK, result)
-}
-
-func parseUsageQuery(c *gin.Context) (usage.QueryRange, bool, error) {
-	var query usage.QueryRange
-	var filtered bool
-	if start := strings.TrimSpace(c.Query("start")); start != "" {
-		parsed, err := parseUsageTime(start)
-		if err != nil {
-			return query, false, err
-		}
-		query.Start = parsed
-		filtered = true
-	}
-	if end := strings.TrimSpace(c.Query("end")); end != "" {
-		parsed, err := parseUsageTime(end)
-		if err != nil {
-			return query, false, err
-		}
-		query.End = parsed
-		filtered = true
-	}
-	query.APIKey = strings.TrimSpace(c.Query("api_key"))
-	query.Source = strings.TrimSpace(c.Query("source"))
-	query.Provider = strings.TrimSpace(c.Query("provider"))
-	query.Model = strings.TrimSpace(c.Query("model"))
-	if query.APIKey != "" || query.Source != "" || query.Provider != "" || query.Model != "" {
-		filtered = true
-	}
-	return query, filtered, nil
-}
-
-func parseUsageTime(value string) (time.Time, error) {
-	if parsed, err := time.Parse(time.RFC3339Nano, value); err == nil {
-		return parsed, nil
-	}
-	if parsed, err := time.Parse(time.RFC3339, value); err == nil {
-		return parsed, nil
-	}
-	if unix, err := strconv.ParseInt(value, 10, 64); err == nil {
-		if unix > 1_000_000_000_000 {
-			return time.UnixMilli(unix), nil
-		}
-		return time.Unix(unix, 0), nil
-	}
-	return time.Time{}, &usageTimeParseError{value: value}
-}
-
-type usageTimeParseError struct {
-	value string
-}
-
-func (e *usageTimeParseError) Error() string {
-	return "invalid usage time: " + e.value
-}
-
-// ExportUsageStatistics returns a complete usage snapshot for backup/migration.
-func (h *Handler) ExportUsageStatistics(c *gin.Context) {
-	var snapshot usage.StatisticsSnapshot
-	if h != nil && h.usageStats != nil {
-		snapshot = h.usageStats.Snapshot()
-	}
-	c.JSON(http.StatusOK, usageExportPayload{
-		Version:    1,
-		ExportedAt: time.Now().UTC(),
-		Usage:      snapshot,
-	})
-}
-
-// ImportUsageStatistics merges a previously exported usage snapshot into memory.
-func (h *Handler) ImportUsageStatistics(c *gin.Context) {
-	if h == nil || h.usageStats == nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "usage statistics unavailable"})
+// GetUsageQueue pops queued usage records from the usage queue.
+func (h *Handler) GetUsageQueue(c *gin.Context) {
+	if h == nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "handler unavailable"})
 		return
 	}
 
-	data, err := c.GetRawData()
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "failed to read request body"})
+	count, errCount := parseUsageQueueCount(c.Query("count"))
+	if errCount != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": errCount.Error()})
 		return
 	}
 
-	var payload usageImportPayload
-	if err := json.Unmarshal(data, &payload); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid json"})
-		return
-	}
-	if payload.Version != 0 && payload.Version != 1 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "unsupported version"})
-		return
+	items := redisqueue.PopOldest(count)
+	records := make([]usageQueueRecord, 0, len(items))
+	for _, item := range items {
+		records = append(records, usageQueueRecord(append([]byte(nil), item...)))
 	}
 
-	result := h.usageStats.MergeSnapshot(payload.Usage)
-	snapshot := h.usageStats.Snapshot()
-	c.JSON(http.StatusOK, gin.H{
-		"added":           result.Added,
-		"skipped":         result.Skipped,
-		"total_requests":  snapshot.TotalRequests,
-		"failed_requests": snapshot.FailureCount,
-	})
+	c.JSON(http.StatusOK, records)
+}
+
+func parseUsageQueueCount(value string) (int, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return 1, nil
+	}
+	count, errCount := strconv.Atoi(value)
+	if errCount != nil || count <= 0 {
+		return 0, errors.New("count must be a positive integer")
+	}
+	return count, nil
 }
