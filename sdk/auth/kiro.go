@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
-	kiroauth "github.com/router-for-me/CLIProxyAPI/v6/internal/auth/kiro"
-	"github.com/router-for-me/CLIProxyAPI/v6/internal/config"
-	coreauth "github.com/router-for-me/CLIProxyAPI/v6/sdk/cliproxy/auth"
+	kiroauth "github.com/router-for-me/CLIProxyAPI/v7/internal/auth/kiro"
+	"github.com/router-for-me/CLIProxyAPI/v7/internal/config"
+	coreauth "github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy/auth"
 )
 
 // extractKiroIdentifier extracts a meaningful identifier for file naming.
@@ -151,9 +151,9 @@ func (a *KiroAuthenticator) createAuthRecord(tokenData *kiroauth.KiroTokenData, 
 	}
 
 	if tokenData.Email != "" {
-		fmt.Printf("\n✓ Kiro authentication completed successfully! (Account: %s)\n", tokenData.Email)
+		fmt.Printf("\n鉁?Kiro authentication completed successfully! (Account: %s)\n", tokenData.Email)
 	} else {
-		fmt.Println("\n✓ Kiro authentication completed successfully!")
+		fmt.Println("\n鉁?Kiro authentication completed successfully!")
 	}
 
 	return record, nil
@@ -245,9 +245,9 @@ func (a *KiroAuthenticator) LoginWithAuthCode(ctx context.Context, cfg *config.C
 	}
 
 	if tokenData.Email != "" {
-		fmt.Printf("\n✓ Kiro authentication completed successfully! (Account: %s)\n", tokenData.Email)
+		fmt.Printf("\n鉁?Kiro authentication completed successfully! (Account: %s)\n", tokenData.Email)
 	} else {
-		fmt.Println("\n✓ Kiro authentication completed successfully!")
+		fmt.Println("\n鉁?Kiro authentication completed successfully!")
 	}
 
 	return record, nil
@@ -331,9 +331,9 @@ func (a *KiroAuthenticator) ImportFromKiroIDE(ctx context.Context, cfg *config.C
 
 	// Display the email if extracted
 	if tokenData.Email != "" {
-		fmt.Printf("\n✓ Imported Kiro token from IDE (Provider: %s, Account: %s)\n", tokenData.Provider, tokenData.Email)
+		fmt.Printf("\n鉁?Imported Kiro token from IDE (Provider: %s, Account: %s)\n", tokenData.Provider, tokenData.Email)
 	} else {
-		fmt.Printf("\n✓ Imported Kiro token from IDE (Provider: %s)\n", tokenData.Provider)
+		fmt.Printf("\n鉁?Imported Kiro token from IDE (Provider: %s)\n", tokenData.Provider)
 	}
 
 	return record, nil

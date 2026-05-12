@@ -19,9 +19,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/router-for-me/CLIProxyAPI/v6/internal/browser"
-	"github.com/router-for-me/CLIProxyAPI/v6/internal/config"
-	"github.com/router-for-me/CLIProxyAPI/v6/internal/util"
+	"github.com/router-for-me/CLIProxyAPI/v7/internal/browser"
+	"github.com/router-for-me/CLIProxyAPI/v7/internal/config"
+	"github.com/router-for-me/CLIProxyAPI/v7/internal/util"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -364,9 +364,9 @@ func (c *SSOOIDCClient) RefreshTokenWithRegion(ctx context.Context, clientID, cl
 
 // LoginWithIDC performs the full device code flow for AWS Identity Center (IDC).
 func (c *SSOOIDCClient) LoginWithIDC(ctx context.Context, startURL, region string) (*KiroTokenData, error) {
-	fmt.Println("\n╔══════════════════════════════════════════════════════════╗")
-	fmt.Println("║       Kiro Authentication (AWS Identity Center)          ║")
-	fmt.Println("╚══════════════════════════════════════════════════════════╝")
+	fmt.Println("\n============================================================")
+	fmt.Println("      Kiro Authentication (AWS Identity Center)")
+	fmt.Println("============================================================")
 
 	// Step 1: Register client with the specified region
 	fmt.Println("\nRegistering client...")
@@ -385,10 +385,10 @@ func (c *SSOOIDCClient) LoginWithIDC(ctx context.Context, startURL, region strin
 
 	// Step 3: Show user the verification URL
 	fmt.Printf("\n")
-	fmt.Println("════════════════════════════════════════════════════════════")
+	fmt.Println("============================================================")
 	fmt.Printf("  Confirm the following code in the browser:\n")
 	fmt.Printf("  Code: %s\n", authResp.UserCode)
-	fmt.Println("════════════════════════════════════════════════════════════")
+	fmt.Println("============================================================")
 	fmt.Printf("\n  Open this URL: %s\n\n", authResp.VerificationURIComplete)
 
 	// Set incognito mode based on config
@@ -442,7 +442,7 @@ func (c *SSOOIDCClient) LoginWithIDC(ctx context.Context, startURL, region strin
 				return nil, fmt.Errorf("token creation failed: %w", err)
 			}
 
-			fmt.Println("\n\n✓ Authorization successful!")
+			fmt.Println("\n\nAuthorization successful!")
 
 			// Close the browser window
 			if err := browser.CloseBrowser(); err != nil {
@@ -495,9 +495,9 @@ type IDCLoginOptions struct {
 // Options can be provided to pre-configure IDC parameters (startURL, region).
 // If StartURL is provided in opts, IDC flow is used directly without prompting.
 func (c *SSOOIDCClient) LoginWithMethodSelection(ctx context.Context, opts *IDCLoginOptions) (*KiroTokenData, error) {
-	fmt.Println("\n╔══════════════════════════════════════════════════════════╗")
-	fmt.Println("║              Kiro Authentication (AWS)                    ║")
-	fmt.Println("╚══════════════════════════════════════════════════════════╝")
+	fmt.Println("\n============================================================")
+	fmt.Println("             Kiro Authentication (AWS)")
+	fmt.Println("============================================================")
 
 	// If IDC options with StartURL are provided, skip method selection and use IDC directly
 	if opts != nil && opts.StartURL != "" {
@@ -770,9 +770,9 @@ func (c *SSOOIDCClient) RefreshToken(ctx context.Context, clientID, clientSecret
 
 // LoginWithBuilderID performs the full device code flow for AWS Builder ID.
 func (c *SSOOIDCClient) LoginWithBuilderID(ctx context.Context) (*KiroTokenData, error) {
-	fmt.Println("\n╔══════════════════════════════════════════════════════════╗")
-	fmt.Println("║         Kiro Authentication (AWS Builder ID)              ║")
-	fmt.Println("╚══════════════════════════════════════════════════════════╝")
+	fmt.Println("\n============================================================")
+	fmt.Println("        Kiro Authentication (AWS Builder ID)")
+	fmt.Println("============================================================")
 
 	// Step 1: Register client
 	fmt.Println("\nRegistering client...")
@@ -791,10 +791,10 @@ func (c *SSOOIDCClient) LoginWithBuilderID(ctx context.Context) (*KiroTokenData,
 
 	// Step 3: Show user the verification URL
 	fmt.Printf("\n")
-	fmt.Println("════════════════════════════════════════════════════════════")
+	fmt.Println("============================================================")
 	fmt.Printf("  Open this URL in your browser:\n")
 	fmt.Printf("  %s\n", authResp.VerificationURIComplete)
-	fmt.Println("════════════════════════════════════════════════════════════")
+	fmt.Println("============================================================")
 	fmt.Printf("\n  Or go to: %s\n", authResp.VerificationURI)
 	fmt.Printf("  And enter code: %s\n\n", authResp.UserCode)
 
@@ -851,7 +851,7 @@ func (c *SSOOIDCClient) LoginWithBuilderID(ctx context.Context) (*KiroTokenData,
 				return nil, fmt.Errorf("token creation failed: %w", err)
 			}
 
-			fmt.Println("\n\n✓ Authorization successful!")
+			fmt.Println("\n\nAuthorization successful!")
 
 			// Close the browser window
 			if err := browser.CloseBrowser(); err != nil {
@@ -1361,9 +1361,9 @@ func (c *SSOOIDCClient) CreateTokenWithAuthCodeAndRegion(ctx context.Context, cl
 // LoginWithBuilderIDAuthCode performs the authorization code flow for AWS Builder ID.
 // This provides a better UX than device code flow as it uses automatic browser callback.
 func (c *SSOOIDCClient) LoginWithBuilderIDAuthCode(ctx context.Context) (*KiroTokenData, error) {
-	fmt.Println("\n╔══════════════════════════════════════════════════════════╗")
-	fmt.Println("║     Kiro Authentication (AWS Builder ID - Auth Code)      ║")
-	fmt.Println("╚══════════════════════════════════════════════════════════╝")
+	fmt.Println("\n============================================================")
+	fmt.Println("    Kiro Authentication (AWS Builder ID - Auth Code)")
+	fmt.Println("============================================================")
 
 	// Step 1: Generate PKCE and state
 	codeVerifier, codeChallenge, err := generatePKCEForAuthCode()
@@ -1418,7 +1418,7 @@ func (c *SSOOIDCClient) LoginWithBuilderIDAuthCode(ctx context.Context) (*KiroTo
 
 	if err := browser.OpenURL(authURL); err != nil {
 		log.Warnf("Could not open browser automatically: %v", err)
-		fmt.Println("  ⚠ Could not open browser automatically.")
+		fmt.Println("  Could not open browser automatically.")
 		fmt.Println("  Please open the URL above in your browser manually.")
 	} else {
 		fmt.Println("  (Browser opened automatically)")
@@ -1440,7 +1440,7 @@ func (c *SSOOIDCClient) LoginWithBuilderIDAuthCode(ctx context.Context) (*KiroTo
 			return nil, fmt.Errorf("authorization failed: %s", result.Error)
 		}
 
-		fmt.Println("\n✓ Authorization received!")
+		fmt.Println("\nAuthorization received!")
 
 		// Close browser
 		if err := browser.CloseBrowser(); err != nil {
@@ -1454,7 +1454,7 @@ func (c *SSOOIDCClient) LoginWithBuilderIDAuthCode(ctx context.Context) (*KiroTo
 			return nil, fmt.Errorf("failed to exchange code for tokens: %w", err)
 		}
 
-		fmt.Println("\n✓ Authentication successful!")
+		fmt.Println("\nAuthentication successful!")
 
 		// Fetch user email (tries CodeWhisperer API first, then userinfo endpoint, then JWT parsing)
 		email := FetchUserEmailWithFallback(ctx, c.cfg, tokenResp.AccessToken, regResp.ClientID, tokenResp.RefreshToken)
@@ -1480,9 +1480,9 @@ func (c *SSOOIDCClient) LoginWithBuilderIDAuthCode(ctx context.Context) (*KiroTo
 }
 
 func (c *SSOOIDCClient) LoginWithIDCAuthCode(ctx context.Context, startURL, region string) (*KiroTokenData, error) {
-	fmt.Println("\n╔══════════════════════════════════════════════════════════╗")
-	fmt.Println("║     Kiro Authentication (AWS IDC - Auth Code)             ║")
-	fmt.Println("╚══════════════════════════════════════════════════════════╝")
+	fmt.Println("\n============================================================")
+	fmt.Println("    Kiro Authentication (AWS IDC - Auth Code)")
+	fmt.Println("============================================================")
 
 	if region == "" {
 		region = defaultIDCRegion
@@ -1529,7 +1529,7 @@ func (c *SSOOIDCClient) LoginWithIDCAuthCode(ctx context.Context, startURL, regi
 
 	if err := browser.OpenURL(authURL); err != nil {
 		log.Warnf("Could not open browser automatically: %v", err)
-		fmt.Println("  ⚠ Could not open browser automatically.")
+		fmt.Println("  Could not open browser automatically.")
 		fmt.Println("  Please open the URL above in your browser manually.")
 	} else {
 		fmt.Println("  (Browser opened automatically)")
@@ -1550,7 +1550,7 @@ func (c *SSOOIDCClient) LoginWithIDCAuthCode(ctx context.Context, startURL, regi
 			return nil, fmt.Errorf("authorization failed: %s", result.Error)
 		}
 
-		fmt.Println("\n✓ Authorization received!")
+		fmt.Println("\nAuthorization received!")
 
 		if err := browser.CloseBrowser(); err != nil {
 			log.Debugf("Failed to close browser: %v", err)
@@ -1562,7 +1562,7 @@ func (c *SSOOIDCClient) LoginWithIDCAuthCode(ctx context.Context, startURL, regi
 			return nil, fmt.Errorf("failed to exchange code for tokens: %w", err)
 		}
 
-		fmt.Println("\n✓ Authentication successful!")
+		fmt.Println("\nAuthentication successful!")
 
 		fmt.Println("Fetching profile information...")
 		profileArn := c.FetchProfileArn(ctx, tokenResp.AccessToken, regResp.ClientID, tokenResp.RefreshToken)

@@ -21,16 +21,16 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	kiroauth "github.com/router-for-me/CLIProxyAPI/v6/internal/auth/kiro"
-	"github.com/router-for-me/CLIProxyAPI/v6/internal/config"
-	kiroclaude "github.com/router-for-me/CLIProxyAPI/v6/internal/translator/kiro/claude"
-	kirocommon "github.com/router-for-me/CLIProxyAPI/v6/internal/translator/kiro/common"
-	kiroopenai "github.com/router-for-me/CLIProxyAPI/v6/internal/translator/kiro/openai"
-	"github.com/router-for-me/CLIProxyAPI/v6/internal/util"
-	cliproxyauth "github.com/router-for-me/CLIProxyAPI/v6/sdk/cliproxy/auth"
-	cliproxyexecutor "github.com/router-for-me/CLIProxyAPI/v6/sdk/cliproxy/executor"
-	"github.com/router-for-me/CLIProxyAPI/v6/sdk/cliproxy/usage"
-	sdktranslator "github.com/router-for-me/CLIProxyAPI/v6/sdk/translator"
+	kiroauth "github.com/router-for-me/CLIProxyAPI/v7/internal/auth/kiro"
+	"github.com/router-for-me/CLIProxyAPI/v7/internal/config"
+	kiroclaude "github.com/router-for-me/CLIProxyAPI/v7/internal/translator/kiro/claude"
+	kirocommon "github.com/router-for-me/CLIProxyAPI/v7/internal/translator/kiro/common"
+	kiroopenai "github.com/router-for-me/CLIProxyAPI/v7/internal/translator/kiro/openai"
+	"github.com/router-for-me/CLIProxyAPI/v7/internal/util"
+	cliproxyauth "github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy/auth"
+	cliproxyexecutor "github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy/executor"
+	"github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy/usage"
+	sdktranslator "github.com/router-for-me/CLIProxyAPI/v7/sdk/translator"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -217,7 +217,7 @@ func isRetryableHTTPStatus(statusCode int) bool {
 
 // calculateRetryDelay calculates the delay for the next retry attempt using exponential backoff.
 // delay = min(baseDelay * 2^attempt, maxDelay)
-// Adds ±30% jitter to prevent thundering herd.
+// Adds 卤30% jitter to prevent thundering herd.
 func calculateRetryDelay(attempt int, cfg retryConfig) time.Duration {
 	return kiroauth.ExponentialBackoffWithJitter(attempt, cfg.BaseDelay, cfg.MaxDelay)
 }
@@ -475,7 +475,7 @@ func buildKiroPayloadForFormat(body []byte, modelID, profileArn, origin string, 
 		log.Debugf("kiro: using OpenAI payload builder for source format: %s", sourceFormat.String())
 		return kiroopenai.BuildKiroPayloadFromOpenAI(body, modelID, profileArn, origin, isAgentic, isChatOnly, headers, nil)
 	case "kiro":
-		// Body is already in Kiro format — pass through directly
+		// Body is already in Kiro format 鈥?pass through directly
 		log.Debugf("kiro: body already in Kiro format, passing through directly")
 		return body, false
 	default:
@@ -628,15 +628,15 @@ func (e *KiroExecutor) Execute(ctx context.Context, auth *cliproxyauth.Auth, req
 	if e.isTokenExpired(accessToken) {
 		log.Infof("kiro: access token expired, attempting recovery")
 
-		// 方案 B: 先尝试从文件重新加载 token（后台刷新器可能已更新文件）
+		// 鏂规 B: 鍏堝皾璇曚粠鏂囦欢閲嶆柊鍔犺浇 token锛堝悗鍙板埛鏂板櫒鍙兘宸叉洿鏂版枃浠讹級
 		reloadedAuth, reloadErr := e.reloadAuthFromFile(auth)
 		if reloadErr == nil && reloadedAuth != nil {
-			// 文件中有更新的 token，使用它
+			// 鏂囦欢涓湁鏇存柊鐨?token锛屼娇鐢ㄥ畠
 			auth = reloadedAuth
 			accessToken, profileArn = kiroCredentials(auth)
 			log.Infof("kiro: recovered token from file (background refresh), expires_at: %v", auth.Metadata["expires_at"])
 		} else {
-			// 文件中的 token 也过期了，执行主动刷新
+			// 鏂囦欢涓殑 token 涔熻繃鏈熶簡锛屾墽琛屼富鍔ㄥ埛鏂?
 			log.Debugf("kiro: file reload failed (%v), attempting active refresh", reloadErr)
 			refreshedAuth, refreshErr := e.Refresh(ctx, auth)
 			if refreshErr != nil {
@@ -1064,15 +1064,15 @@ func (e *KiroExecutor) ExecuteStream(ctx context.Context, auth *cliproxyauth.Aut
 	if e.isTokenExpired(accessToken) {
 		log.Infof("kiro: access token expired, attempting recovery before stream request")
 
-		// 方案 B: 先尝试从文件重新加载 token（后台刷新器可能已更新文件）
+		// 鏂规 B: 鍏堝皾璇曚粠鏂囦欢閲嶆柊鍔犺浇 token锛堝悗鍙板埛鏂板櫒鍙兘宸叉洿鏂版枃浠讹級
 		reloadedAuth, reloadErr := e.reloadAuthFromFile(auth)
 		if reloadErr == nil && reloadedAuth != nil {
-			// 文件中有更新的 token，使用它
+			// 鏂囦欢涓湁鏇存柊鐨?token锛屼娇鐢ㄥ畠
 			auth = reloadedAuth
 			accessToken, profileArn = kiroCredentials(auth)
 			log.Infof("kiro: recovered token from file (background refresh) for stream, expires_at: %v", auth.Metadata["expires_at"])
 		} else {
-			// 文件中的 token 也过期了，执行主动刷新
+			// 鏂囦欢涓殑 token 涔熻繃鏈熶簡锛屾墽琛屼富鍔ㄥ埛鏂?
 			log.Debugf("kiro: file reload failed (%v), attempting active refresh for stream", reloadErr)
 			refreshedAuth, refreshErr := e.Refresh(ctx, auth)
 			if refreshErr != nil {
@@ -1492,7 +1492,7 @@ func kiroCredentials(auth *cliproxyauth.Auth) (accessToken, profileArn string) {
 //
 // False positives (discussion text) have characteristics:
 // - In the middle of a sentence
-// - Preceded by discussion words like "标签", "tag", "returns"
+// - Preceded by discussion words like "鏍囩", "tag", "returns"
 // - Inside code blocks or inline code
 //
 // Parameters:
@@ -1571,7 +1571,7 @@ func findRealThinkingEndTag(content string, alreadyInCodeBlock, alreadyInInlineC
 
 		// Discussion patterns - if found, this is likely discussion text
 		discussionPatterns := []string{
-			"标签", "返回", "输出", "包含", "使用", "解析", "转换", "生成", // Chinese
+			"鏍囩", "杩斿洖", "杈撳嚭", "鍖呭惈", "浣跨敤", "瑙ｆ瀽", "杞崲", "鐢熸垚", // Chinese
 			"tag", "return", "output", "contain", "use", "parse", "emit", "convert", "generate", // English
 			"<thinking>",    // discussing both tags together
 			"`</thinking>`", // explicitly in inline code
@@ -1639,7 +1639,7 @@ func determineAgenticMode(model string) (isAgentic, isChatOnly bool) {
 
 // getEffectiveProfileArnWithWarning suppresses profileArn for builder-id and AWS SSO OIDC auth.
 // Builder-id users (auth_method == "builder-id") and AWS SSO OIDC users (auth_type == "aws_sso_oidc")
-// don't need profileArn — sending it causes 403 errors.
+// don't need profileArn 鈥?sending it causes 403 errors.
 // For all other auth methods (e.g. social auth), profileArn is returned as-is,
 // with a warning logged if it is empty.
 func getEffectiveProfileArnWithWarning(auth *cliproxyauth.Auth, profileArn string) string {
@@ -3875,15 +3875,15 @@ func (e *KiroExecutor) fetchAndSaveProfileArn(ctx context.Context, auth *cliprox
 	return profileArn
 }
 
-// reloadAuthFromFile 从文件重新加载 auth 数据（方案 B: Fallback 机制）
-// 当内存中的 token 已过期时，尝试从文件读取最新的 token
-// 这解决了后台刷新器已更新文件但内存中 Auth 对象尚未同步的时间差问题
+// reloadAuthFromFile 浠庢枃浠堕噸鏂板姞杞?auth 鏁版嵁锛堟柟妗?B: Fallback 鏈哄埗锛?
+// 褰撳唴瀛樹腑鐨?token 宸茶繃鏈熸椂锛屽皾璇曚粠鏂囦欢璇诲彇鏈€鏂扮殑 token
+// 杩欒В鍐充簡鍚庡彴鍒锋柊鍣ㄥ凡鏇存柊鏂囦欢浣嗗唴瀛樹腑 Auth 瀵硅薄灏氭湭鍚屾鐨勬椂闂村樊闂
 func (e *KiroExecutor) reloadAuthFromFile(auth *cliproxyauth.Auth) (*cliproxyauth.Auth, error) {
 	if auth == nil {
 		return nil, fmt.Errorf("kiro executor: cannot reload nil auth")
 	}
 
-	// 确定文件路径
+	// 纭畾鏂囦欢璺緞
 	var authPath string
 	if auth.Attributes != nil {
 		if p := strings.TrimSpace(auth.Attributes["path"]); p != "" {
@@ -3904,34 +3904,34 @@ func (e *KiroExecutor) reloadAuthFromFile(auth *cliproxyauth.Auth) (*cliproxyaut
 		}
 	}
 
-	// 读取文件
+	// 璇诲彇鏂囦欢
 	raw, err := os.ReadFile(authPath)
 	if err != nil {
 		return nil, fmt.Errorf("kiro executor: failed to read auth file %s: %w", authPath, err)
 	}
 
-	// 解析 JSON
+	// 瑙ｆ瀽 JSON
 	var metadata map[string]any
 	if err := json.Unmarshal(raw, &metadata); err != nil {
 		return nil, fmt.Errorf("kiro executor: failed to parse auth file %s: %w", authPath, err)
 	}
 
-	// 检查文件中的 token 是否比内存中的更新
+	// 妫€鏌ユ枃浠朵腑鐨?token 鏄惁姣斿唴瀛樹腑鐨勬洿鏂?
 	fileExpiresAt, _ := metadata["expires_at"].(string)
 	fileAccessToken, _ := metadata["access_token"].(string)
 	memExpiresAt, _ := auth.Metadata["expires_at"].(string)
 	memAccessToken, _ := auth.Metadata["access_token"].(string)
 
-	// 文件中必须有有效的 access_token
+	// 鏂囦欢涓繀椤绘湁鏈夋晥鐨?access_token
 	if fileAccessToken == "" {
 		return nil, fmt.Errorf("kiro executor: auth file has no access_token field")
 	}
 
-	// 如果有 expires_at，检查是否过期
+	// 濡傛灉鏈?expires_at锛屾鏌ユ槸鍚﹁繃鏈?
 	if fileExpiresAt != "" {
 		fileExpTime, parseErr := time.Parse(time.RFC3339, fileExpiresAt)
 		if parseErr == nil {
-			// 如果文件中的 token 也已过期，不使用它
+			// 濡傛灉鏂囦欢涓殑 token 涔熷凡杩囨湡锛屼笉浣跨敤瀹?
 			if time.Now().After(fileExpTime) {
 				log.Debugf("kiro executor: file token also expired at %s, not using", fileExpiresAt)
 				return nil, fmt.Errorf("kiro executor: file token also expired")
@@ -3939,18 +3939,18 @@ func (e *KiroExecutor) reloadAuthFromFile(auth *cliproxyauth.Auth) (*cliproxyaut
 		}
 	}
 
-	// 判断文件中的 token 是否比内存中的更新
-	// 条件1: access_token 不同（说明已刷新）
-	// 条件2: expires_at 更新（说明已刷新）
+	// 鍒ゆ柇鏂囦欢涓殑 token 鏄惁姣斿唴瀛樹腑鐨勬洿鏂?
+	// 鏉′欢1: access_token 涓嶅悓锛堣鏄庡凡鍒锋柊锛?
+	// 鏉′欢2: expires_at 鏇存柊锛堣鏄庡凡鍒锋柊锛?
 	isNewer := false
 
-	// 优先检查 access_token 是否变化
+	// 浼樺厛妫€鏌?access_token 鏄惁鍙樺寲
 	if fileAccessToken != memAccessToken {
 		isNewer = true
 		log.Debugf("kiro executor: file access_token differs from memory, using file token")
 	}
 
-	// 如果 access_token 相同，检查 expires_at
+	// 濡傛灉 access_token 鐩稿悓锛屾鏌?expires_at
 	if !isNewer && fileExpiresAt != "" && memExpiresAt != "" {
 		fileExpTime, fileParseErr := time.Parse(time.RFC3339, fileExpiresAt)
 		memExpTime, memParseErr := time.Parse(time.RFC3339, memExpiresAt)
@@ -3960,7 +3960,7 @@ func (e *KiroExecutor) reloadAuthFromFile(auth *cliproxyauth.Auth) (*cliproxyaut
 		}
 	}
 
-	// 如果文件中没有 expires_at 但 access_token 相同，无法判断是否更新
+	// 濡傛灉鏂囦欢涓病鏈?expires_at 浣?access_token 鐩稿悓锛屾棤娉曞垽鏂槸鍚︽洿鏂?
 	if !isNewer && fileExpiresAt == "" && fileAccessToken == memAccessToken {
 		return nil, fmt.Errorf("kiro executor: cannot determine if file token is newer (no expires_at, same access_token)")
 	}
@@ -3970,12 +3970,12 @@ func (e *KiroExecutor) reloadAuthFromFile(auth *cliproxyauth.Auth) (*cliproxyaut
 		return nil, fmt.Errorf("kiro executor: file token not newer")
 	}
 
-	// 创建更新后的 auth 对象
+	// 鍒涘缓鏇存柊鍚庣殑 auth 瀵硅薄
 	updated := auth.Clone()
 	updated.Metadata = metadata
 	updated.UpdatedAt = time.Now()
 
-	// 同步更新 Attributes
+	// 鍚屾鏇存柊 Attributes
 	if updated.Attributes == nil {
 		updated.Attributes = make(map[string]string)
 	}
@@ -4048,15 +4048,15 @@ func (e *KiroExecutor) isTokenExpired(accessToken string) bool {
 	return isExpired
 }
 
-// ══════════════════════════════════════════════════════════════════════════════
+// 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲
 // Web Search Handler (MCP API)
-// ══════════════════════════════════════════════════════════════════════════════
+// 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲
 
 // fetchToolDescription caching:
 // Uses a mutex + fetched flag to ensure only one goroutine fetches at a time,
 // with automatic retry on failure:
 // - On failure, fetched stays false so subsequent calls will retry
-// - On success, fetched is set to true — subsequent calls skip immediately (mutex-free fast path)
+// - On success, fetched is set to true 鈥?subsequent calls skip immediately (mutex-free fast path)
 // The cached description is stored in the translator package via kiroclaude.SetWebSearchDescription(),
 // enabling the translator's convertClaudeToolsToKiro to read it when building Kiro requests.
 var (
@@ -4065,7 +4065,7 @@ var (
 )
 
 // fetchToolDescription calls MCP tools/list to get the web_search tool description
-// and caches it. Safe to call concurrently — only one goroutine fetches at a time.
+// and caches it. Safe to call concurrently 鈥?only one goroutine fetches at a time.
 // If the fetch fails, subsequent calls will retry. On success, no further fetches occur.
 // The httpClient parameter allows reusing a shared pooled HTTP client.
 func fetchToolDescription(ctx context.Context, mcpEndpoint, authToken string, httpClient *http.Client, auth *cliproxyauth.Auth, authAttrs map[string]string) {
@@ -4126,7 +4126,7 @@ func fetchToolDescription(ctx context.Context, mcpEndpoint, authToken string, ht
 	for _, tool := range result.Result.Tools {
 		if tool.Name == "web_search" && tool.Description != "" {
 			kiroclaude.SetWebSearchDescription(tool.Description)
-			toolDescFetched.Store(true) // success — no more fetches
+			toolDescFetched.Store(true) // success 鈥?no more fetches
 			log.Infof("kiro/websearch: cached web_search description from tools/list (%d bytes)", len(tool.Description))
 			return
 		}
@@ -4200,7 +4200,7 @@ func (h *webSearchHandler) callMcpAPI(request *kiroclaude.McpRequest) (*kiroclau
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal MCP request: %w", err)
 	}
-	log.Debugf("kiro/websearch MCP request → %s (%d bytes)", h.mcpEndpoint, len(requestBody))
+	log.Debugf("kiro/websearch MCP request 鈫?%s (%d bytes)", h.mcpEndpoint, len(requestBody))
 
 	var lastErr error
 	for attempt := 0; attempt <= mcpMaxRetries; attempt++ {
@@ -4227,16 +4227,16 @@ func (h *webSearchHandler) callMcpAPI(request *kiroclaude.McpRequest) (*kiroclau
 		resp, err := h.httpClient.Do(req)
 		if err != nil {
 			lastErr = fmt.Errorf("MCP API request failed: %w", err)
-			continue // network error → retry
+			continue // network error 鈫?retry
 		}
 
 		body, err := io.ReadAll(resp.Body)
 		resp.Body.Close()
 		if err != nil {
 			lastErr = fmt.Errorf("failed to read MCP response: %w", err)
-			continue // read error → retry
+			continue // read error 鈫?retry
 		}
-		log.Debugf("kiro/websearch MCP response ← [%d] (%d bytes)", resp.StatusCode, len(body))
+		log.Debugf("kiro/websearch MCP response 鈫?[%d] (%d bytes)", resp.StatusCode, len(body))
 
 		// Retryable HTTP status codes (aligned with GAR: 502, 503, 504)
 		if resp.StatusCode >= 502 && resp.StatusCode <= 504 {
@@ -4283,8 +4283,8 @@ func webSearchAuthAttrs(auth *cliproxyauth.Auth) map[string]string {
 const maxWebSearchIterations = 5
 
 // handleWebSearchStream handles web_search requests:
-// Step 1: tools/list (sync) → fetch/cache tool description
-// Step 2+: MCP search → InjectToolResultsClaude → callKiroAndBuffer loop
+// Step 1: tools/list (sync) 鈫?fetch/cache tool description
+// Step 2+: MCP search 鈫?InjectToolResultsClaude 鈫?callKiroAndBuffer loop
 // Note: We skip the "model decides to search" step because Claude Code already
 // decided to use web_search. The Kiro tool description restricts non-coding
 // topics, so asking the model again would cause it to refuse valid searches.
@@ -4306,7 +4306,7 @@ func (e *KiroExecutor) handleWebSearchStream(
 	region := resolveKiroAPIRegion(auth)
 	mcpEndpoint := kiroclaude.BuildMcpEndpoint(region)
 
-	// ── Step 1: tools/list (SYNC) — cache tool description ──
+	// 鈹€鈹€ Step 1: tools/list (SYNC) 鈥?cache tool description 鈹€鈹€
 	{
 		authAttrs := webSearchAuthAttrs(auth)
 		fetchToolDescription(ctx, mcpEndpoint, accessToken, newKiroHTTPClientWithPooling(ctx, e.cfg, auth, 30*time.Second), auth, authAttrs)
@@ -4361,7 +4361,7 @@ func (e *KiroExecutor) handleWebSearchStream(
 		case out <- cliproxyexecutor.StreamChunk{Payload: append(msgStart, '\n', '\n')}:
 		}
 
-		// ── Step 2+: MCP search → InjectToolResultsClaude → callKiroAndBuffer loop ──
+		// 鈹€鈹€ Step 2+: MCP search 鈫?InjectToolResultsClaude 鈫?callKiroAndBuffer loop 鈹€鈹€
 		contentBlockIndex := 0
 		currentQuery := query
 
@@ -4404,7 +4404,7 @@ func (e *KiroExecutor) handleWebSearchStream(
 				resultCount = len(searchResults.Results)
 			}
 			totalSearches++
-			log.Infof("kiro/websearch: iteration %d — got %d search results", iteration+1, resultCount)
+			log.Infof("kiro/websearch: iteration %d 鈥?got %d search results", iteration+1, resultCount)
 
 			// Send search indicator events to client
 			searchEvents := kiroclaude.GenerateSearchIndicatorEvents(currentQuery, currentToolUseId, searchResults, contentBlockIndex)
@@ -4440,7 +4440,7 @@ func (e *KiroExecutor) handleWebSearchStream(
 
 			// Analyze response
 			analysis := kiroclaude.AnalyzeBufferedStream(kiroChunks)
-			log.Infof("kiro/websearch: iteration %d — stop_reason: %s, has_tool_use: %v",
+			log.Infof("kiro/websearch: iteration %d 鈥?stop_reason: %s, has_tool_use: %v",
 				iteration+1, analysis.StopReason, analysis.HasWebSearchToolUse)
 
 			if analysis.HasWebSearchToolUse && analysis.WebSearchQuery != "" && iteration+1 < maxWebSearchIterations {
@@ -4459,7 +4459,7 @@ func (e *KiroExecutor) handleWebSearchStream(
 				continue
 			}
 
-			// Model returned final response — stream to client
+			// Model returned final response 鈥?stream to client
 			for _, chunk := range kiroChunks {
 				if contentBlockIndex > 0 && len(chunk) > 0 {
 					adjusted, shouldForward := kiroclaude.AdjustSSEChunk(chunk, contentBlockIndex)
@@ -4556,7 +4556,7 @@ func (e *KiroExecutor) handleWebSearch(
 	}
 
 	// Step 5: Call Kiro API via the normal non-streaming path (executeWithRetry)
-	// This path uses parseEventStream → BuildClaudeResponse → TranslateNonStream
+	// This path uses parseEventStream 鈫?BuildClaudeResponse 鈫?TranslateNonStream
 	// to produce a proper Claude JSON response
 	modifiedReq := req
 	modifiedReq.Payload = modifiedPayload
@@ -4587,7 +4587,7 @@ func (e *KiroExecutor) handleWebSearch(
 
 // callKiroAndBuffer calls the Kiro API and buffers all response chunks.
 // Returns the buffered chunks for analysis before forwarding to client.
-// Usage reporting is NOT done here — the caller (handleWebSearchStream) manages its own reporter.
+// Usage reporting is NOT done here 鈥?the caller (handleWebSearchStream) manages its own reporter.
 func (e *KiroExecutor) callKiroAndBuffer(
 	ctx context.Context,
 	auth *cliproxyauth.Auth,

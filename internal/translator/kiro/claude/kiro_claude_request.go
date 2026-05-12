@@ -12,7 +12,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/google/uuid"
-	kirocommon "github.com/router-for-me/CLIProxyAPI/v6/internal/translator/kiro/common"
+	kirocommon "github.com/router-for-me/CLIProxyAPI/v7/internal/translator/kiro/common"
 	log "github.com/sirupsen/logrus"
 	"github.com/tidwall/gjson"
 )
@@ -575,7 +575,7 @@ func convertClaudeToolsToKiro(tools gjson.Result) []KiroToolWrapper {
 			log.Debugf("kiro: tool '%s' has empty description, using default: %s", name, description)
 		}
 
-		// Rename web_search → remote_web_search for Kiro API compatibility
+		// Rename web_search 鈫?remote_web_search for Kiro API compatibility
 		if name == "web_search" {
 			name = "remote_web_search"
 			// Prefer dynamically fetched description, fall back to hardcoded constant
@@ -584,7 +584,7 @@ func convertClaudeToolsToKiro(tools gjson.Result) []KiroToolWrapper {
 			} else {
 				description = remoteWebSearchDescription
 			}
-			log.Debugf("kiro: renamed tool web_search → remote_web_search")
+			log.Debugf("kiro: renamed tool web_search 鈫?remote_web_search")
 		}
 
 		// Truncate long descriptions (individual tool limit)
@@ -925,7 +925,7 @@ func BuildAssistantMessageStruct(msg gjson.Result) KiroAssistantResponseMessage 
 					})
 				}
 
-				// Rename web_search → remote_web_search to match convertClaudeToolsToKiro
+				// Rename web_search 鈫?remote_web_search to match convertClaudeToolsToKiro
 				if toolName == "web_search" {
 					toolName = "remote_web_search"
 				}

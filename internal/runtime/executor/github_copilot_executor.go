@@ -13,14 +13,14 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	copilotauth "github.com/router-for-me/CLIProxyAPI/v6/internal/auth/copilot"
-	"github.com/router-for-me/CLIProxyAPI/v6/internal/config"
-	"github.com/router-for-me/CLIProxyAPI/v6/internal/registry"
-	"github.com/router-for-me/CLIProxyAPI/v6/internal/runtime/executor/helps"
-	"github.com/router-for-me/CLIProxyAPI/v6/internal/thinking"
-	cliproxyauth "github.com/router-for-me/CLIProxyAPI/v6/sdk/cliproxy/auth"
-	cliproxyexecutor "github.com/router-for-me/CLIProxyAPI/v6/sdk/cliproxy/executor"
-	sdktranslator "github.com/router-for-me/CLIProxyAPI/v6/sdk/translator"
+	copilotauth "github.com/router-for-me/CLIProxyAPI/v7/internal/auth/copilot"
+	"github.com/router-for-me/CLIProxyAPI/v7/internal/config"
+	"github.com/router-for-me/CLIProxyAPI/v7/internal/registry"
+	"github.com/router-for-me/CLIProxyAPI/v7/internal/runtime/executor/helps"
+	"github.com/router-for-me/CLIProxyAPI/v7/internal/thinking"
+	cliproxyauth "github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy/auth"
+	cliproxyexecutor "github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy/executor"
+	sdktranslator "github.com/router-for-me/CLIProxyAPI/v7/sdk/translator"
 	log "github.com/sirupsen/logrus"
 	"github.com/tidwall/gjson"
 	"github.com/tidwall/sjson"
@@ -643,8 +643,8 @@ func (e *GitHubCopilotExecutor) applyHeaders(r *http.Request, apiToken string, b
 // (tool callbacks, continuations) rather than user-initiated (new user prompt).
 //
 // GitHub Copilot uses the X-Initiator header for billing:
-//   - "user"  → consumes premium request quota
-//   - "agent" → free (tool loops, continuations)
+//   - "user"  鈫?consumes premium request quota
+//   - "agent" 鈫?free (tool loops, continuations)
 //
 // The challenge: Claude Code sends tool results as role:"user" messages with
 // content type "tool_result". After translation to OpenAI format, the tool_result
@@ -656,7 +656,7 @@ func (e *GitHubCopilotExecutor) applyHeaders(r *http.Request, apiToken string, b
 // VSCode Copilot Chat solves this with explicit flags (iterationNumber,
 // isContinuation, subAgentInvocationId). Since CPA doesn't have these flags,
 // we infer agent status by checking whether the conversation contains prior
-// assistant/tool messages — if it does, the current request is a continuation.
+// assistant/tool messages 鈥?if it does, the current request is a continuation.
 //
 // References:
 //   - opencode#8030, opencode#15824: same root cause and fix approach
@@ -1007,7 +1007,7 @@ func normalizeGitHubCopilotResponsesInput(body []byte) []byte {
 	// which is critical for multi-turn tool-use conversations.
 	inputArr := "[]"
 
-	// System messages → developer role
+	// System messages 鈫?developer role
 	if system := gjson.GetBytes(body, "system"); system.Exists() {
 		var systemParts []string
 		if system.IsArray() {
@@ -1030,7 +1030,7 @@ func normalizeGitHubCopilotResponsesInput(body []byte) []byte {
 		}
 	}
 
-	// Messages → structured input items
+	// Messages 鈫?structured input items
 	if messages := gjson.GetBytes(body, "messages"); messages.Exists() && messages.IsArray() {
 		for _, msg := range messages.Array() {
 			role := msg.Get("role").String()
@@ -1261,12 +1261,12 @@ func mapClaudeControlsToCodexReasoning(body []byte) []byte {
 //   - vscode-copilot-chat: src/platform/endpoint/node/responsesApi.ts
 //   - pi-ai (badlogic/pi-mono): packages/ai/src/providers/openai-responses.ts
 func applyGitHubCopilotResponsesDefaults(body []byte) []byte {
-	// store: false — prevents request/response storage
+	// store: false 鈥?prevents request/response storage
 	if !gjson.GetBytes(body, "store").Exists() {
 		body, _ = sjson.SetBytes(body, "store", false)
 	}
 
-	// include: ["reasoning.encrypted_content"] — enables reasoning content
+	// include: ["reasoning.encrypted_content"] 鈥?enables reasoning content
 	// reuse across turns, avoiding redundant computation
 	if !gjson.GetBytes(body, "include").Exists() {
 		body, _ = sjson.SetRawBytes(body, "include", []byte(`["reasoning.encrypted_content"]`))
@@ -1834,7 +1834,7 @@ func FetchGitHubCopilotModels(ctx context.Context, auth *cliproxyauth.Auth, cfg 
 		// The API returns per-account limits (individual vs business) under
 		// capabilities.limits, which are more accurate than our static
 		// fallback values. We use max_prompt_tokens as ContextLength because
-		// that's the hard limit the Copilot API enforces on prompt size —
+		// that's the hard limit the Copilot API enforces on prompt size 鈥?
 		// exceeding it triggers "prompt token count exceeds the limit" errors.
 		if limits := entry.Limits(); limits != nil {
 			if limits.MaxPromptTokens > 0 {

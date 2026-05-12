@@ -1,5 +1,5 @@
 // Package openai provides translation between OpenAI Chat Completions and Kiro formats.
-// This package enables direct OpenAI → Kiro translation, bypassing the Claude intermediate layer.
+// This package enables direct OpenAI 鈫?Kiro translation, bypassing the Claude intermediate layer.
 //
 // The Kiro executor generates Claude-compatible SSE format internally, so the streaming response
 // translation converts from Claude SSE format to OpenAI SSE format.
@@ -11,8 +11,8 @@ import (
 	"encoding/json"
 	"strings"
 
-	kirocommon "github.com/router-for-me/CLIProxyAPI/v6/internal/translator/kiro/common"
-	"github.com/router-for-me/CLIProxyAPI/v6/sdk/cliproxy/usage"
+	kirocommon "github.com/router-for-me/CLIProxyAPI/v7/internal/translator/kiro/common"
+	"github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy/usage"
 	log "github.com/sirupsen/logrus"
 	"github.com/tidwall/gjson"
 )

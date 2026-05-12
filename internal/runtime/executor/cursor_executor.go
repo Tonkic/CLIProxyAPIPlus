@@ -17,13 +17,13 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	cursorauth "github.com/router-for-me/CLIProxyAPI/v6/internal/auth/cursor"
-	cursorproto "github.com/router-for-me/CLIProxyAPI/v6/internal/auth/cursor/proto"
-	"github.com/router-for-me/CLIProxyAPI/v6/internal/config"
-	"github.com/router-for-me/CLIProxyAPI/v6/internal/registry"
-	cliproxyauth "github.com/router-for-me/CLIProxyAPI/v6/sdk/cliproxy/auth"
-	cliproxyexecutor "github.com/router-for-me/CLIProxyAPI/v6/sdk/cliproxy/executor"
-	sdktranslator "github.com/router-for-me/CLIProxyAPI/v6/sdk/translator"
+	cursorauth "github.com/router-for-me/CLIProxyAPI/v7/internal/auth/cursor"
+	cursorproto "github.com/router-for-me/CLIProxyAPI/v7/internal/auth/cursor/proto"
+	"github.com/router-for-me/CLIProxyAPI/v7/internal/config"
+	"github.com/router-for-me/CLIProxyAPI/v7/internal/registry"
+	cliproxyauth "github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy/auth"
+	cliproxyexecutor "github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy/executor"
+	sdktranslator "github.com/router-for-me/CLIProxyAPI/v7/sdk/translator"
 	log "github.com/sirupsen/logrus"
 	"github.com/tidwall/gjson"
 	"golang.org/x/net/http2"
@@ -142,7 +142,7 @@ func (e *CursorExecutor) findSessionByConversationLocked(convId string) string {
 }
 
 // cursorStatusErr implements the StatusError and RetryAfter interfaces so the
-// conductor can classify Cursor errors (e.g. 429 → quota cooldown).
+// conductor can classify Cursor errors (e.g. 429 鈫?quota cooldown).
 type cursorStatusErr struct {
 	code int
 	msg  string
@@ -177,7 +177,7 @@ func classifyCursorError(err error) error {
 		case "internal":
 			return cursorStatusErr{code: 500, msg: err.Error()}
 		default:
-			// Unknown Connect code — log for observation, treat as 502
+			// Unknown Connect code 鈥?log for observation, treat as 502
 			return cursorStatusErr{code: 502, msg: err.Error()}
 		}
 	}
@@ -396,7 +396,7 @@ func (e *CursorExecutor) ExecuteStream(ctx context.Context, auth *cliproxyauth.A
 	log.Debugf("cursor: conversationId=%s authID=%s", conversationId, authID)
 
 	// Session key includes authID (H2 stream is auth-specific, not transferable).
-	// Checkpoint key uses conversationId only — allows detecting auth migration.
+	// Checkpoint key uses conversationId only 鈥?allows detecting auth migration.
 	sessionKey := authID + ":" + conversationId
 	checkpointKey := conversationId
 	needsTranslate := from.String() != "" && from.String() != "openai"
@@ -429,7 +429,7 @@ func (e *CursorExecutor) ExecuteStream(ctx context.Context, auth *cliproxyauth.A
 			return e.resumeWithToolResults(ctx, session, parsed, from, to, req, originalPayload, payload, needsTranslate)
 		}
 		if hasSession && session.authID != authID {
-			log.Warnf("cursor: session %s belongs to auth %s, but request is from %s — skipping resume", sessionKey, session.authID, authID)
+			log.Warnf("cursor: session %s belongs to auth %s, but request is from %s 鈥?skipping resume", sessionKey, session.authID, authID)
 		}
 	}
 
@@ -450,7 +450,7 @@ func (e *CursorExecutor) ExecuteStream(ctx context.Context, auth *cliproxyauth.A
 
 	// Look up saved checkpoint for this conversation (keyed by conversationId only).
 	// Checkpoint is auth-specific: if auth changed (e.g. quota exhaustion failover),
-	// the old checkpoint is useless on the new account — discard and flatten.
+	// the old checkpoint is useless on the new account 鈥?discard and flatten.
 	e.mu.Lock()
 	saved, hasCheckpoint := e.checkpoints[checkpointKey]
 	e.mu.Unlock()
@@ -458,7 +458,7 @@ func (e *CursorExecutor) ExecuteStream(ctx context.Context, auth *cliproxyauth.A
 	params := buildRunRequestParams(parsed, conversationId)
 
 	if hasCheckpoint && saved.data != nil && saved.authID == authID {
-		// Same auth — use checkpoint normally
+		// Same auth 鈥?use checkpoint normally
 		log.Debugf("cursor: using saved checkpoint (%d bytes) for conv=%s auth=%s", len(saved.data), checkpointKey, authID)
 		params.RawCheckpoint = saved.data
 		// Merge saved blobStore into params
@@ -471,9 +471,9 @@ func (e *CursorExecutor) ExecuteStream(ctx context.Context, auth *cliproxyauth.A
 			}
 		}
 	} else if hasCheckpoint && saved.data != nil && saved.authID != authID {
-		// Auth changed (quota failover) — checkpoint is not portable across accounts.
+		// Auth changed (quota failover) 鈥?checkpoint is not portable across accounts.
 		// Discard and flatten conversation history into userText.
-		log.Infof("cursor: auth migrated (%s → %s) for conv=%s, discarding checkpoint and flattening context", saved.authID, authID, checkpointKey)
+		log.Infof("cursor: auth migrated (%s 鈫?%s) for conv=%s, discarding checkpoint and flattening context", saved.authID, authID, checkpointKey)
 		e.mu.Lock()
 		delete(e.checkpoints, checkpointKey)
 		e.mu.Unlock()
@@ -672,17 +672,17 @@ func (e *CursorExecutor) ExecuteStream(ctx context.Context, auth *cliproxyauth.A
 			},
 		)
 
-		// processH2SessionFrames returned — stream is done.
+		// processH2SessionFrames returned 鈥?stream is done.
 		// Check if error happened before any chunks were emitted.
 		if streamErr != nil {
 			select {
 			case <-firstChunkSent:
-				// Chunks were already sent to client — can't transparently retry.
+				// Chunks were already sent to client 鈥?can't transparently retry.
 				// Next request will failover via conductor's cooldown mechanism.
 				log.Warnf("cursor: stream error after data sent (auth=%s conv=%s): %v", authID, conversationId, streamErr)
 			default:
-				// No data sent yet — propagate error for transparent conductor retry.
-				log.Warnf("cursor: stream error before data sent (auth=%s conv=%s): %v — signaling retry", authID, conversationId, streamErr)
+				// No data sent yet 鈥?propagate error for transparent conductor retry.
+				log.Warnf("cursor: stream error before data sent (auth=%s conv=%s): %v 鈥?signaling retry", authID, conversationId, streamErr)
 				streamErrCh <- streamErr
 				outMu.Lock()
 				if currentOut != nil {
@@ -737,7 +737,7 @@ func (e *CursorExecutor) ExecuteStream(ctx context.Context, auth *cliproxyauth.A
 	case streamErr := <-streamErrCh:
 		return nil, classifyCursorError(fmt.Errorf("cursor: stream failed before response: %w", streamErr))
 	case <-firstChunkSent:
-		// Data started flowing — return stream to client
+		// Data started flowing 鈥?return stream to client
 		return &cliproxyexecutor.StreamResult{Chunks: chunks}, nil
 	}
 }
@@ -745,7 +745,7 @@ func (e *CursorExecutor) ExecuteStream(ctx context.Context, auth *cliproxyauth.A
 // resumeWithToolResults injects tool results into the running processH2SessionFrames
 // via the toolResultCh channel. The original goroutine from ExecuteStream is still alive,
 // blocking on toolResultCh. Once we send the results, it sends the MCP result to Cursor
-// and continues processing the response text — all in the same goroutine that has been
+// and continues processing the response text 鈥?all in the same goroutine that has been
 // handling KV messages the whole time.
 func (e *CursorExecutor) resumeWithToolResults(
 	ctx context.Context,
@@ -774,7 +774,7 @@ func (e *CursorExecutor) resumeWithToolResults(
 		session.switchOutput(session.resumeOutCh)
 	}
 
-	// Inject tool results — this unblocks the waiting processH2SessionFrames
+	// Inject tool results 鈥?this unblocks the waiting processH2SessionFrames
 	session.toolResultCh <- parsed.ToolResults
 
 	// Return the resumeOutCh for the new HTTP handler to read from
@@ -1145,7 +1145,7 @@ func parseOpenAIRequest(payload []byte) *parsedOpenAIRequest {
 				})
 				pendingUser = ""
 			} else if len(p.Turns) > 0 && assistantText != "" {
-				// Assistant message after tool results (no pending user) —
+				// Assistant message after tool results (no pending user) 鈥?
 				// append to the last turn's assistant text to preserve context.
 				last := &p.Turns[len(p.Turns)-1]
 				if last.AssistantText != "" {
@@ -1386,7 +1386,7 @@ func extractClaudeCodeSessionId(payload []byte) string {
 func deriveConversationId(apiKey, sessionId, systemPrompt string) string {
 	var input string
 	if sessionId != "" {
-		// Best: use Claude Code's session_id — stable even across resume
+		// Best: use Claude Code's session_id 鈥?stable even across resume
 		input = "cursor-conv:" + apiKey + ":" + sessionId
 	} else {
 		// Fallback: use system prompt content minus volatile cch

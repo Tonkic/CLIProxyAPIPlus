@@ -20,9 +20,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/router-for-me/CLIProxyAPI/v6/internal/browser"
-	"github.com/router-for-me/CLIProxyAPI/v6/internal/config"
-	"github.com/router-for-me/CLIProxyAPI/v6/internal/util"
+	"github.com/router-for-me/CLIProxyAPI/v7/internal/browser"
+	"github.com/router-for-me/CLIProxyAPI/v7/internal/config"
+	"github.com/router-for-me/CLIProxyAPI/v7/internal/util"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/term"
 )
@@ -322,9 +322,9 @@ func (c *SocialAuthClient) RefreshSocialToken(ctx context.Context, refreshToken 
 func (c *SocialAuthClient) LoginWithSocial(ctx context.Context, provider SocialProvider) (*KiroTokenData, error) {
 	providerName := string(provider)
 
-	fmt.Println("\n╔══════════════════════════════════════════════════════════╗")
-	fmt.Printf("║         Kiro Authentication (%s)                    ║\n", providerName)
-	fmt.Println("╚══════════════════════════════════════════════════════════╝")
+	fmt.Println("\n鈺斺晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晽")
+	fmt.Printf("鈺?        Kiro Authentication (%s)                    鈺慭n", providerName)
+	fmt.Println("鈺氣晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨暆")
 
 	// Step 1: Start local HTTP callback server (instead of kiro:// protocol handler)
 	// This avoids redirect_mismatch errors with AWS Cognito
@@ -367,14 +367,14 @@ func (c *SocialAuthClient) LoginWithSocial(ctx context.Context, provider SocialP
 	}
 
 	// Step 6: Open browser for user authentication
-	fmt.Println("\n════════════════════════════════════════════════════════════")
+	fmt.Println("\n鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲")
 	fmt.Printf("  Opening browser for %s authentication...\n", providerName)
-	fmt.Println("════════════════════════════════════════════════════════════")
+	fmt.Println("鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲")
 	fmt.Printf("\n  URL: %s\n\n", authURL)
 
 	if err := browser.OpenURL(authURL); err != nil {
 		log.Warnf("Could not open browser automatically: %v", err)
-		fmt.Println("  ⚠ Could not open browser automatically.")
+		fmt.Println("  鈿?Could not open browser automatically.")
 		fmt.Println("  Please open the URL above in your browser manually.")
 	} else {
 		fmt.Println("  (Browser opened automatically)")
@@ -398,7 +398,7 @@ func (c *SocialAuthClient) LoginWithSocial(ctx context.Context, provider SocialP
 			return nil, fmt.Errorf("no authorization code received")
 		}
 
-		fmt.Println("\n✓ Authorization received!")
+		fmt.Println("\n鉁?Authorization received!")
 
 		// Step 8: Exchange code for tokens
 		fmt.Println("Exchanging code for tokens...")
@@ -414,7 +414,7 @@ func (c *SocialAuthClient) LoginWithSocial(ctx context.Context, provider SocialP
 			return nil, fmt.Errorf("failed to exchange code for tokens: %w", err)
 		}
 
-		fmt.Println("\n✓ Authentication successful!")
+		fmt.Println("\n鉁?Authentication successful!")
 
 		// Close the browser window
 		if err := browser.CloseBrowser(); err != nil {

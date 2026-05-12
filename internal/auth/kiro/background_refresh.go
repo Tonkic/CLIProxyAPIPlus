@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/router-for-me/CLIProxyAPI/v6/internal/config"
+	"github.com/router-for-me/CLIProxyAPI/v7/internal/config"
 	"golang.org/x/sync/semaphore"
 )
 
@@ -59,8 +59,8 @@ type BackgroundRefresher struct {
 	wg               sync.WaitGroup
 	oauth            *KiroOAuth
 	ssoClient        *SSOOIDCClient
-	callbackMu       sync.RWMutex                                   // 保护回调函数的并发访问
-	onTokenRefreshed func(tokenID string, tokenData *KiroTokenData) // 刷新成功回调
+	callbackMu       sync.RWMutex                                   // 淇濇姢鍥炶皟鍑芥暟鐨勫苟鍙戣闂?
+	onTokenRefreshed func(tokenID string, tokenData *KiroTokenData) // 鍒锋柊鎴愬姛鍥炶皟
 }
 
 func NewBackgroundRefresher(repo TokenRepository, opts ...RefresherOption) *BackgroundRefresher {
@@ -227,13 +227,13 @@ func (r *BackgroundRefresher) refreshSingle(ctx context.Context, token *Token) {
 		return
 	}
 
-	// 方案 A: 刷新成功后触发回调，通知 Watcher 更新内存中的 Auth 对象
+	// 鏂规 A: 鍒锋柊鎴愬姛鍚庤Е鍙戝洖璋冿紝閫氱煡 Watcher 鏇存柊鍐呭瓨涓殑 Auth 瀵硅薄
 	r.callbackMu.RLock()
 	callback := r.onTokenRefreshed
 	r.callbackMu.RUnlock()
 
 	if callback != nil {
-		// 使用 defer recover 隔离回调 panic，防止崩溃整个进程
+		// 浣跨敤 defer recover 闅旂鍥炶皟 panic锛岄槻姝㈠穿婧冩暣涓繘绋?
 		func() {
 			defer func() {
 				if rec := recover(); rec != nil {

@@ -9,12 +9,12 @@ import (
 	"testing"
 	"time"
 
-	copilotauth "github.com/router-for-me/CLIProxyAPI/v6/internal/auth/copilot"
-	"github.com/router-for-me/CLIProxyAPI/v6/internal/config"
-	"github.com/router-for-me/CLIProxyAPI/v6/internal/registry"
-	cliproxyauth "github.com/router-for-me/CLIProxyAPI/v6/sdk/cliproxy/auth"
-	cliproxyexecutor "github.com/router-for-me/CLIProxyAPI/v6/sdk/cliproxy/executor"
-	sdktranslator "github.com/router-for-me/CLIProxyAPI/v6/sdk/translator"
+	copilotauth "github.com/router-for-me/CLIProxyAPI/v7/internal/auth/copilot"
+	"github.com/router-for-me/CLIProxyAPI/v7/internal/config"
+	"github.com/router-for-me/CLIProxyAPI/v7/internal/registry"
+	cliproxyauth "github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy/auth"
+	cliproxyexecutor "github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy/executor"
+	sdktranslator "github.com/router-for-me/CLIProxyAPI/v7/sdk/translator"
 	"github.com/tidwall/gjson"
 )
 
@@ -617,7 +617,7 @@ func TestApplyHeaders_XInitiator_InputArrayAgentWhenLastUserButHistoryHasAssista
 	t.Parallel()
 	e := &GitHubCopilotExecutor{}
 	req, _ := http.NewRequest(http.MethodPost, "https://example.com", nil)
-	// Responses API: last item is user-role but history contains assistant → agent.
+	// Responses API: last item is user-role but history contains assistant 鈫?agent.
 	body := []byte(`{"input":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"I can help"}]},{"type":"message","role":"user","content":[{"type":"input_text","text":"Do X"}]}]}`)
 	e.applyHeaders(req, "token", body)
 	if got := req.Header.Get("X-Initiator"); got != "agent" {
@@ -640,8 +640,8 @@ func TestApplyHeaders_XInitiator_UserInMultiTurnNoTools(t *testing.T) {
 	t.Parallel()
 	e := &GitHubCopilotExecutor{}
 	req, _ := http.NewRequest(http.MethodPost, "https://example.com", nil)
-	// Genuine multi-turn: user → assistant (plain text) → user follow-up.
-	// No tool messages → should be "user" (not a false-positive).
+	// Genuine multi-turn: user 鈫?assistant (plain text) 鈫?user follow-up.
+	// No tool messages 鈫?should be "user" (not a false-positive).
 	body := []byte(`{"messages":[{"role":"user","content":"hello"},{"role":"assistant","content":"Hi there!"},{"role":"user","content":"what is 2+2?"}]}`)
 	e.applyHeaders(req, "token", body)
 	if got := req.Header.Get("X-Initiator"); got != "user" {
@@ -654,7 +654,7 @@ func TestApplyHeaders_XInitiator_UserFollowUpAfterToolHistory(t *testing.T) {
 	e := &GitHubCopilotExecutor{}
 	req, _ := http.NewRequest(http.MethodPost, "https://example.com", nil)
 	// User follow-up after a completed tool-use conversation.
-	// The last message is a genuine user question — should be "user", not "agent".
+	// The last message is a genuine user question 鈥?should be "user", not "agent".
 	// This aligns with opencode's behavior: only active tool loops are agent-initiated.
 	body := []byte(`{"messages":[{"role":"user","content":"hello"},{"role":"assistant","content":[{"type":"tool_use","id":"tu1","name":"Read","input":{}}]},{"role":"tool","tool_call_id":"tu1","content":"file data"},{"role":"assistant","content":"I read the file."},{"role":"user","content":"What did we do so far?"}]}`)
 	e.applyHeaders(req, "token", body)
@@ -703,7 +703,7 @@ func TestDetectVisionContent_NoVision(t *testing.T) {
 
 func TestDetectVisionContent_NoMessages(t *testing.T) {
 	t.Parallel()
-	// After Responses API normalization, messages is removed — detection should return false
+	// After Responses API normalization, messages is removed 鈥?detection should return false
 	body := []byte(`{"input":[{"type":"message","role":"user","content":[{"type":"input_text","text":"hello"}]}]}`)
 	if detectVisionContent(body) {
 		t.Fatal("expected no vision content when messages field is absent")
@@ -862,7 +862,7 @@ func TestCountTokens_ClaudeSourceFormatTranslates(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CountTokens() error: %v", err)
 	}
-	// Claude source format → should get input_tokens in response
+	// Claude source format 鈫?should get input_tokens in response
 	inputTokens := gjson.GetBytes(resp.Payload, "input_tokens").Int()
 	if inputTokens <= 0 {
 		// Fallback: check usage.prompt_tokens (depends on translator registration)
