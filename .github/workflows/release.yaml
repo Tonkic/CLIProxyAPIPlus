@@ -68,7 +68,7 @@ jobs:
       - name: Download CPA Usage Keeper binaries
         shell: bash
         env:
-          KEEPER_VERSION: v1.4.0
+          KEEPER_VERSION: v1.7.1
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail

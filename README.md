@@ -149,7 +149,7 @@ Linux release-directory deployments can update in place:
 
 ```bash
 ./update-linux.sh
-./update-linux.sh --tag v7.0.3.1
+./update-linux.sh --tag v7.0.6.1
 ./update-linux.sh --no-restart
 ```
 
@@ -157,7 +157,7 @@ Windows:
 
 ```powershell
 .\update-windows.ps1
-.\update-windows.ps1 -Tag v7.0.3.1
+.\update-windows.ps1 -Tag v7.0.6.1
 .\update-windows.ps1 -NoRestart
 ```
 
@@ -190,7 +190,7 @@ go test ./...
 
 ## Release
 
-Releases use the upstream CLIProxyAPI version plus a Plus counter, for example `v7.0.3.1`. The release workflow builds Linux and Windows archives for amd64 and arm64 and includes the updater scripts plus CPA Usage Keeper helper files.
+Releases use the upstream CLIProxyAPI version plus a Plus counter, for example `v7.0.6.1`. The release workflow builds Linux and Windows archives for amd64 and arm64 and includes the updater scripts plus CPA Usage Keeper helper files.
 
 ## Upstream Projects
 

@@ -129,7 +129,7 @@ Linux：
 
 ```bash
 ./update-linux.sh
-./update-linux.sh --tag v7.0.3.1
+./update-linux.sh --tag v7.0.6.1
 ./update-linux.sh --no-restart
 ```
 
@@ -137,7 +137,7 @@ Windows：
 
 ```powershell
 .\update-windows.ps1
-.\update-windows.ps1 -Tag v7.0.3.1
+.\update-windows.ps1 -Tag v7.0.6.1
 .\update-windows.ps1 -NoRestart
 ```
 
