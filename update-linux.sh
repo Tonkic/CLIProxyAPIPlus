@@ -70,6 +70,15 @@ run() {
   fi
 }
 
+install_executable() {
+  src=$1
+  dst=$2
+  tmp="${dst}.new.$$"
+  run cp "$src" "$tmp"
+  run chmod +x "$tmp"
+  run mv -f "$tmp" "$dst"
+}
+
 need_cmd() {
   command -v "$1" >/dev/null 2>&1 || fail "required command not found: $1"
 }
@@ -319,8 +328,7 @@ fi
 if [ -f "$BIN_PATH" ]; then
   run cp "$BIN_PATH" "$BACKUP_DIR/cli-proxy-api-plus"
 fi
-run cp "$NEW_BIN" "$BIN_PATH"
-run chmod +x "$BIN_PATH"
+install_executable "$NEW_BIN" "$BIN_PATH"
 
 for file in start-plus-with-keeper.sh start-plus-with-keeper.ps1 update-linux-oss.sh README.md README_CN.md README_JA.md config.example.yaml; do
   if [ -f "$STAGING_DIR/$file" ]; then
@@ -334,8 +342,7 @@ if [ -f "$STAGING_DIR/keeper/.env.example" ]; then
 fi
 if [ -f "$STAGING_DIR/keeper/cpa-usage-keeper" ]; then
   run mkdir -p "$INSTALL_DIR/keeper"
-  run cp "$STAGING_DIR/keeper/cpa-usage-keeper" "$INSTALL_DIR/keeper/cpa-usage-keeper"
-  run chmod +x "$INSTALL_DIR/keeper/cpa-usage-keeper"
+  install_executable "$STAGING_DIR/keeper/cpa-usage-keeper" "$INSTALL_DIR/keeper/cpa-usage-keeper"
 fi
 
 if [ "$NO_RESTART" -eq 0 ]; then
