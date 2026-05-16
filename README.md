@@ -153,6 +153,24 @@ Linux release-directory deployments can update in place:
 ./update-linux.sh --no-restart
 ```
 
+For private Aliyun OSS mirrors, install and configure `ossutil`, then download from OSS and update from local files:
+
+```bash
+./update-linux-oss.sh \
+  --tag v7.1.1.1 \
+  --bucket update-cpa-plus \
+  --endpoint oss-cn-shenzhen-internal.aliyuncs.com
+```
+
+You can also provide OSS settings through environment variables:
+
+```bash
+export ALIYUN_OSS_BUCKET=update-cpa-plus
+export ALIYUN_OSS_ENDPOINT=oss-cn-shenzhen-internal.aliyuncs.com
+export ALIYUN_OSS_PREFIX=CLIProxyAPIPlus
+./update-linux-oss.sh --tag v7.1.1.1
+```
+
 Windows:
 
 ```powershell

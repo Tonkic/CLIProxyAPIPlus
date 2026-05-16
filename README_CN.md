@@ -133,6 +133,24 @@ Linux：
 ./update-linux.sh --no-restart
 ```
 
+私有阿里云 OSS 镜像更新：先在服务器安装并配置 `ossutil`，再从 OSS 下载到本地文件并更新：
+
+```bash
+./update-linux-oss.sh \
+  --tag v7.1.1.1 \
+  --bucket update-cpa-plus \
+  --endpoint oss-cn-shenzhen-internal.aliyuncs.com
+```
+
+也可以用环境变量保存 OSS 配置：
+
+```bash
+export ALIYUN_OSS_BUCKET=update-cpa-plus
+export ALIYUN_OSS_ENDPOINT=oss-cn-shenzhen-internal.aliyuncs.com
+export ALIYUN_OSS_PREFIX=CLIProxyAPIPlus
+./update-linux-oss.sh --tag v7.1.1.1
+```
+
 Windows：
 
 ```powershell

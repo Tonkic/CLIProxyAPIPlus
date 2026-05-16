@@ -322,7 +322,7 @@ fi
 run cp "$NEW_BIN" "$BIN_PATH"
 run chmod +x "$BIN_PATH"
 
-for file in start-plus-with-keeper.sh start-plus-with-keeper.ps1 README.md README_CN.md README_JA.md config.example.yaml; do
+for file in start-plus-with-keeper.sh start-plus-with-keeper.ps1 update-linux-oss.sh README.md README_CN.md README_JA.md config.example.yaml; do
   if [ -f "$STAGING_DIR/$file" ]; then
     run cp "$STAGING_DIR/$file" "$INSTALL_DIR/$file"
   fi

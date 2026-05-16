@@ -32,6 +32,7 @@ archives:
       - start-plus-with-keeper.ps1
       - start-plus-with-keeper.sh
       - update-linux.sh
+      - update-linux-oss.sh
       - update-windows.ps1
       - src: keeper/.env.example
         dst: keeper/.env.example
