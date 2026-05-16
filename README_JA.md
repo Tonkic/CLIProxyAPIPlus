@@ -13,8 +13,8 @@ CLIProxyAPI Plus は、単一プロジェクトの単純な fork ではなく、
 
 ## 機能
 
-- OpenAI、Gemini、Claude、Codex、Responses 互換 API。
-- Codex、Claude、Gemini、Kimi、Antigravity、GitHub Copilot、Kiro、Cursor、CodeBuddy、Kilo、iFlow、GitLab Duo などのログインまたは token 接続。
+- OpenAI、Gemini、Claude、Codex、Grok、Responses 互換 API。
+- Codex、Claude、Gemini、Kimi、Antigravity、xAI/Grok、GitHub Copilot、Kiro、Cursor、CodeBuddy、Kilo、iFlow、GitLab Duo などのログインまたは token 接続。
 - round-robin / fill-first のアカウント選択、model alias、hot reload。
 - Amp CLI と Amp IDE extension 用の provider route。
 - 対応 provider での WebSocket。

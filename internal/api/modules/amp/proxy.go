@@ -56,6 +56,21 @@ type readCloser struct {
 func (rc *readCloser) Read(p []byte) (int, error) { return rc.r.Read(p) }
 func (rc *readCloser) Close() error               { return rc.c.Close() }
 
+func ampResponseRequestLogFields(resp *http.Response) (string, string) {
+	if resp == nil || resp.Request == nil {
+		return "-", "-"
+	}
+	method := resp.Request.Method
+	if method == "" {
+		method = "-"
+	}
+	path := "-"
+	if resp.Request.URL != nil && resp.Request.URL.Path != "" {
+		path = resp.Request.URL.Path
+	}
+	return method, path
+}
+
 // createReverseProxy creates a reverse proxy handler for Amp upstream
 // with automatic gzip decompression via ModifyResponse
 func createReverseProxy(upstreamURL string, secretSource SecretSource) (*httputil.ReverseProxy, error) {
@@ -112,14 +127,11 @@ func createReverseProxy(upstreamURL string, secretSource SecretSource) (*httputi
 		// Log upstream error responses for diagnostics (502, 503, etc.)
 		// These are NOT proxy connection errors - the upstream responded with an error status
 		if resp.StatusCode >= 500 {
-			log.Errorf("amp upstream responded with error [%d] for %s %s", resp.StatusCode, resp.Request.Method, resp.Request.URL.Path)
+			method, path := ampResponseRequestLogFields(resp)
+			log.Errorf("amp upstream responded with error [%d] for %s %s", resp.StatusCode, method, path)
 		} else if resp.StatusCode >= 400 {
-			log.Warnf("amp upstream responded with client error [%d] for %s %s", resp.StatusCode, resp.Request.Method, resp.Request.URL.Path)
-		}
-
-		// Only process successful responses for gzip decompression
-		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-			return nil
+			method, path := ampResponseRequestLogFields(resp)
+			log.Warnf("amp upstream responded with client error [%d] for %s %s", resp.StatusCode, method, path)
 		}
 
 		// Skip if already marked as gzip (Content-Encoding set)

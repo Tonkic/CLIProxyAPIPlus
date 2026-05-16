@@ -23,6 +23,7 @@ func newAuthManager() *sdkAuth.Manager {
 		sdkAuth.NewGitLabAuthenticator(),
 		sdkAuth.NewCodeBuddyAuthenticator(),
 		sdkAuth.NewCursorAuthenticator(),
+		sdkAuth.NewXAIAuthenticator(),
 	)
 	return manager
 }

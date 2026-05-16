@@ -13,8 +13,8 @@ The goal is to keep the upstream CLIProxyAPI runtime compatible while adding Plu
 
 ## What Is Included
 
-- OpenAI, Gemini, Claude, Codex, and Responses-compatible HTTP APIs.
-- OAuth and token login flows for Codex, Claude, Gemini, Kimi, Antigravity, GitHub Copilot, Kiro, Cursor, CodeBuddy, Kilo, iFlow, and GitLab Duo.
+- OpenAI, Gemini, Claude, Codex, Grok, and Responses-compatible HTTP APIs.
+- OAuth and token login flows for Codex, Claude, Gemini, Kimi, Antigravity, xAI/Grok, GitHub Copilot, Kiro, Cursor, CodeBuddy, Kilo, iFlow, and GitLab Duo.
 - Round-robin and fill-first account selection with model aliases and hot reload.
 - Amp CLI and Amp IDE extension routing through provider-specific API paths.
 - WebSocket support where supported by the upstream provider.

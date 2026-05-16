@@ -973,6 +973,9 @@ func applyClaudeHeaders(r *http.Request, auth *cliproxyauth.Auth, apiKey string,
 			hasClaude1MHeader = true
 		}
 	}
+	if hasClaude1MHeader && !strings.Contains(baseBetas, "context-1m-2025-08-07") {
+		baseBetas += ",context-1m-2025-08-07"
+	}
 
 	// Merge extra betas from request body and request flags.
 	if len(extraBetas) > 0 {
