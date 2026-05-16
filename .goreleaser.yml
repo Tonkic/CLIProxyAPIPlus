@@ -31,6 +31,7 @@ archives:
       - config.example.yaml
       - start-plus-with-keeper.ps1
       - start-plus-with-keeper.sh
+      - restart-plus-with-keeper.sh
       - update-linux.sh
       - update-linux-oss.sh
       - update-windows.ps1

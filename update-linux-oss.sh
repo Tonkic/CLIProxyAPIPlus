@@ -12,6 +12,7 @@ INSTALL_DIR=""
 SESSION=""
 CONFIG_PATH=""
 LOG_PATH=""
+RESTART_SCRIPT=""
 DOWNLOAD_DIR=""
 NO_RESTART=0
 DRY_RUN=0
@@ -39,6 +40,7 @@ Options:
   --session NAME             tmux session name passed to update-linux.sh.
   --config PATH              Config path passed to update-linux.sh.
   --log PATH                 Runtime log path passed to update-linux.sh.
+  --restart-script PATH      Restart script passed to update-linux.sh.
   --no-restart               Install only; do not restart tmux.
   --dry-run                  Print planned actions without downloading or installing.
   --help                     Show this help.
@@ -176,6 +178,11 @@ while [ "$#" -gt 0 ]; do
       LOG_PATH=$2
       shift 2
       ;;
+    --restart-script)
+      [ "$#" -ge 2 ] || fail "--restart-script requires a value"
+      RESTART_SCRIPT=$2
+      shift 2
+      ;;
     --no-restart)
       NO_RESTART=1
       shift
@@ -245,6 +252,9 @@ if [ -n "$CONFIG_PATH" ]; then
 fi
 if [ -n "$LOG_PATH" ]; then
   set -- "$@" --log "$LOG_PATH"
+fi
+if [ -n "$RESTART_SCRIPT" ]; then
+  set -- "$@" --restart-script "$RESTART_SCRIPT"
 fi
 if [ "$NO_RESTART" -eq 1 ]; then
   set -- "$@" --no-restart

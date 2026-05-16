@@ -162,6 +162,22 @@ For private Aliyun OSS mirrors, install and configure `ossutil`, then download f
   --endpoint oss-cn-shenzhen-internal.aliyuncs.com
 ```
 
+To update and restart both tmux sessions used by the bundled proxy and keeper deployment:
+
+```bash
+./update-linux-oss.sh \
+  --tag v7.1.1.2 \
+  --bucket update-cpa-plus \
+  --endpoint oss-cn-shenzhen.aliyuncs.com \
+  --restart-script ./restart-plus-with-keeper.sh
+```
+
+You can also restart without updating:
+
+```bash
+./restart-plus-with-keeper.sh
+```
+
 You can also provide OSS settings through environment variables:
 
 ```bash

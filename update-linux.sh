@@ -7,6 +7,8 @@ INSTALL_DIR=""
 SESSION="cli"
 CONFIG_PATH=""
 LOG_PATH=""
+LOG_PATH_SET=0
+RESTART_SCRIPT=""
 BASE_URL_OVERRIDE=${UPDATE_BASE_URL:-}
 LOCAL_ARCHIVE=${UPDATE_ARCHIVE:-}
 LOCAL_CHECKSUMS=${UPDATE_CHECKSUMS:-}
@@ -37,6 +39,10 @@ Options:
   --session NAME      tmux session name. Defaults to cli.
   --config PATH       Config path. Defaults to INSTALL_DIR/config.yaml.
   --log PATH          Runtime log path. Defaults to INSTALL_DIR/runtime.log.
+  --restart-script PATH
+                      Restart script to run after installing. Receives --install-dir,
+                      --config, and --cli-log arguments. Use this for multi-session
+                      deployments such as CLIProxyAPI Plus + CPA Usage Keeper.
   --no-restart        Install only; do not restart tmux.
   --dry-run           Print planned actions without changing files or restarting.
   --help              Show this help.
@@ -187,6 +193,12 @@ while [ "$#" -gt 0 ]; do
     --log)
       [ "$#" -ge 2 ] || fail "--log requires a value"
       LOG_PATH=$2
+      LOG_PATH_SET=1
+      shift 2
+      ;;
+    --restart-script)
+      [ "$#" -ge 2 ] || fail "--restart-script requires a value"
+      RESTART_SCRIPT=$2
       shift 2
       ;;
     --no-restart)
@@ -330,7 +342,7 @@ if [ -f "$BIN_PATH" ]; then
 fi
 install_executable "$NEW_BIN" "$BIN_PATH"
 
-for file in start-plus-with-keeper.sh start-plus-with-keeper.ps1 update-linux-oss.sh README.md README_CN.md README_JA.md config.example.yaml; do
+for file in start-plus-with-keeper.sh start-plus-with-keeper.ps1 restart-plus-with-keeper.sh update-linux-oss.sh README.md README_CN.md README_JA.md config.example.yaml; do
   if [ -f "$STAGING_DIR/$file" ]; then
     run cp "$STAGING_DIR/$file" "$INSTALL_DIR/$file"
   fi
@@ -346,16 +358,26 @@ if [ -f "$STAGING_DIR/keeper/cpa-usage-keeper" ]; then
 fi
 
 if [ "$NO_RESTART" -eq 0 ]; then
-  log "Restarting tmux session: $SESSION"
-  if tmux has-session -t "$SESSION" 2>/dev/null; then
-    run tmux kill-session -t "$SESSION"
+  if [ -n "$RESTART_SCRIPT" ]; then
+    [ -f "$RESTART_SCRIPT" ] || fail "restart script not found: $RESTART_SCRIPT"
+    log "Restarting with script: $RESTART_SCRIPT"
+    set -- "$RESTART_SCRIPT" --install-dir "$INSTALL_DIR" --config "$CONFIG_PATH" --cli-session "$SESSION"
+    if [ "$LOG_PATH_SET" -eq 1 ]; then
+      set -- "$@" --cli-log "$LOG_PATH"
+    fi
+    run sh "$@"
+  else
+    log "Restarting tmux session: $SESSION"
+    if tmux has-session -t "$SESSION" 2>/dev/null; then
+      run tmux kill-session -t "$SESSION"
+    fi
+    install_q=$(quote_squote "$INSTALL_DIR")
+    bin_q=$(quote_squote "$BIN_PATH")
+    config_q=$(quote_squote "$CONFIG_PATH")
+    log_q=$(quote_squote "$LOG_PATH")
+    cmd="cd '$install_q' && '$bin_q' -config '$config_q' >> '$log_q' 2>&1"
+    run tmux new-session -d -s "$SESSION" "$cmd"
   fi
-  install_q=$(quote_squote "$INSTALL_DIR")
-  bin_q=$(quote_squote "$BIN_PATH")
-  config_q=$(quote_squote "$CONFIG_PATH")
-  log_q=$(quote_squote "$LOG_PATH")
-  cmd="cd '$install_q' && '$bin_q' -config '$config_q' >> '$log_q' 2>&1"
-  run tmux new-session -d -s "$SESSION" "$cmd"
 else
   log "Skipping restart because --no-restart was provided."
 fi

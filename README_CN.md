@@ -142,6 +142,22 @@ Linux：
   --endpoint oss-cn-shenzhen-internal.aliyuncs.com
 ```
 
+如果要更新后同时重启代理和 keeper 两个 tmux session：
+
+```bash
+./update-linux-oss.sh \
+  --tag v7.1.1.2 \
+  --bucket update-cpa-plus \
+  --endpoint oss-cn-shenzhen.aliyuncs.com \
+  --restart-script ./restart-plus-with-keeper.sh
+```
+
+也可以只重启不更新：
+
+```bash
+./restart-plus-with-keeper.sh
+```
+
 也可以用环境变量保存 OSS 配置：
 
 ```bash
