@@ -108,3 +108,35 @@ jobs:
           VERSION: ${{ env.VERSION }}
           COMMIT: ${{ env.COMMIT }}
           BUILD_DATE: ${{ env.BUILD_DATE }}
+
+      - name: Sync release assets to Aliyun OSS
+        shell: bash
+        env:
+          OSS_ACCESS_KEY_ID: ${{ secrets.ALIYUN_OSS_ACCESS_KEY_ID }}
+          OSS_ACCESS_KEY_SECRET: ${{ secrets.ALIYUN_OSS_ACCESS_KEY_SECRET }}
+          OSS_ENDPOINT: ${{ secrets.ALIYUN_OSS_ENDPOINT }}
+          OSS_BUCKET: ${{ secrets.ALIYUN_OSS_BUCKET }}
+          OSS_PREFIX: ${{ vars.ALIYUN_OSS_PREFIX }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${OSS_ACCESS_KEY_ID}" ] || [ -z "${OSS_ACCESS_KEY_SECRET}" ] || [ -z "${OSS_ENDPOINT}" ] || [ -z "${OSS_BUCKET}" ]; then
+            echo "Aliyun OSS secrets are not configured; skipping OSS sync."
+            exit 0
+          fi
+
+          go install github.com/aliyun/ossutil@v1.7.19
+          OSSUTIL="$(go env GOPATH)/bin/ossutil"
+
+          prefix="${OSS_PREFIX:-CLIProxyAPIPlus}"
+          prefix="${prefix#/}"
+          prefix="${prefix%/}"
+          target="oss://${OSS_BUCKET}/${prefix}/${VERSION}"
+
+          echo "Uploading release assets to ${target}/"
+          while IFS= read -r file; do
+            name="$(basename "${file}")"
+            "${OSSUTIL}" cp "${file}" "${target}/${name}" -f -e "${OSS_ENDPOINT}" -i "${OSS_ACCESS_KEY_ID}" -k "${OSS_ACCESS_KEY_SECRET}"
+          done < <(find dist -maxdepth 1 -type f \( -name '*.tar.gz' -o -name '*.zip' -o -name 'checksums.txt' \) | sort)
+
+          echo "OSS sync complete."

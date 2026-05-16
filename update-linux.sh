@@ -7,6 +7,11 @@ INSTALL_DIR=""
 SESSION="cli"
 CONFIG_PATH=""
 LOG_PATH=""
+BASE_URL_OVERRIDE=${UPDATE_BASE_URL:-}
+LOCAL_ARCHIVE=${UPDATE_ARCHIVE:-}
+LOCAL_CHECKSUMS=${UPDATE_CHECKSUMS:-}
+DOWNLOAD_DIR_OVERRIDE=""
+SKIP_CHECKSUM=0
 NO_RESTART=0
 DRY_RUN=0
 
@@ -21,6 +26,14 @@ Options:
   --install-dir PATH  Installation directory. Defaults to this script's directory.
   --tag VERSION       Release tag to install, for example v6.10.0. Defaults to latest.
   --repo OWNER/REPO   GitHub repository. Defaults to Tonkic/CLIProxyAPIPlus.
+  --base-url URL      Download base URL for a mirror/OSS path. Expected files:
+                      URL/<asset> and URL/checksums.txt. Can also be set with UPDATE_BASE_URL.
+  --archive PATH      Use a local release archive instead of downloading it.
+                      Can also be set with UPDATE_ARCHIVE.
+  --checksums PATH    Use a local checksums.txt file instead of downloading it.
+                      Can also be set with UPDATE_CHECKSUMS.
+  --download-dir PATH Directory used for downloaded/copied release files.
+  --skip-checksum     Install without checksum verification. Not recommended.
   --session NAME      tmux session name. Defaults to cli.
   --config PATH       Config path. Defaults to INSTALL_DIR/config.yaml.
   --log PATH          Runtime log path. Defaults to INSTALL_DIR/runtime.log.
@@ -30,7 +43,9 @@ Options:
 
 Examples:
   ./update-linux.sh
-  ./update-linux.sh --tag v6.10.0
+  ./update-linux.sh --tag v7.0.3.1
+  ./update-linux.sh --tag v7.0.3.1 --base-url https://example.com/CLIProxyAPIPlus/v7.0.3.1
+  ./update-linux.sh --archive ./CLIProxyAPIPlus_7.0.3.1_linux_amd64.tar.gz --checksums ./checksums.txt
   ./update-linux.sh --install-dir /opt/CLIProxyAPIPlus --session cli
 EOF
 }
@@ -126,6 +141,30 @@ while [ "$#" -gt 0 ]; do
       REPO=$2
       shift 2
       ;;
+    --base-url)
+      [ "$#" -ge 2 ] || fail "--base-url requires a value"
+      BASE_URL_OVERRIDE=$2
+      shift 2
+      ;;
+    --archive)
+      [ "$#" -ge 2 ] || fail "--archive requires a value"
+      LOCAL_ARCHIVE=$2
+      shift 2
+      ;;
+    --checksums|--checksum)
+      [ "$#" -ge 2 ] || fail "--checksums requires a value"
+      LOCAL_CHECKSUMS=$2
+      shift 2
+      ;;
+    --download-dir)
+      [ "$#" -ge 2 ] || fail "--download-dir requires a value"
+      DOWNLOAD_DIR_OVERRIDE=$2
+      shift 2
+      ;;
+    --skip-checksum)
+      SKIP_CHECKSUM=1
+      shift
+      ;;
     --session)
       [ "$#" -ge 2 ] || fail "--session requires a value"
       SESSION=$2
@@ -165,7 +204,7 @@ CONFIG_PATH=${CONFIG_PATH:-"$INSTALL_DIR/config.yaml"}
 LOG_PATH=${LOG_PATH:-"$INSTALL_DIR/runtime.log"}
 BIN_PATH="$INSTALL_DIR/cli-proxy-api-plus"
 UPDATE_DIR="$INSTALL_DIR/.update"
-DOWNLOAD_DIR="$UPDATE_DIR/downloads"
+DOWNLOAD_DIR=${DOWNLOAD_DIR_OVERRIDE:-"$UPDATE_DIR/downloads"}
 STAGING_DIR="$UPDATE_DIR/staging"
 BACKUP_DIR="$UPDATE_DIR/backups/$(date -u +%Y%m%dT%H%M%SZ)"
 ARCH=$(normalize_arch)
@@ -176,12 +215,24 @@ if [ "$NO_RESTART" -eq 0 ]; then
   need_cmd tmux
 fi
 
-if [ -z "$TAG" ]; then
+if [ -z "$TAG" ] && [ -z "$LOCAL_ARCHIVE" ]; then
   TAG=$(latest_tag)
 fi
-VERSION=$(strip_v "$TAG")
-ASSET="CLIProxyAPIPlus_${VERSION}_${OS}_${ARCH}.tar.gz"
-BASE_URL="https://github.com/${REPO}/releases/download/${TAG}"
+if [ -n "$LOCAL_ARCHIVE" ]; then
+  [ -f "$LOCAL_ARCHIVE" ] || fail "local archive not found: $LOCAL_ARCHIVE"
+  ASSET=$(basename -- "$LOCAL_ARCHIVE")
+  if [ -z "$TAG" ]; then
+    TAG="local"
+  fi
+else
+  VERSION=$(strip_v "$TAG")
+  ASSET="CLIProxyAPIPlus_${VERSION}_${OS}_${ARCH}.tar.gz"
+fi
+if [ -n "$BASE_URL_OVERRIDE" ]; then
+  BASE_URL=$(printf '%s' "$BASE_URL_OVERRIDE" | sed 's:/*$::')
+else
+  BASE_URL="https://github.com/${REPO}/releases/download/${TAG}"
+fi
 ARCHIVE_URL="${BASE_URL}/${ASSET}"
 CHECKSUM_URL="${BASE_URL}/checksums.txt"
 ARCHIVE_PATH="$DOWNLOAD_DIR/$ASSET"
@@ -190,6 +241,15 @@ CHECKSUM_PATH="$DOWNLOAD_DIR/checksums.txt"
 log "Repository: $REPO"
 log "Release tag: $TAG"
 log "Asset: $ASSET"
+if [ -n "$BASE_URL_OVERRIDE" ]; then
+  log "Download base URL: $BASE_URL"
+fi
+if [ -n "$LOCAL_ARCHIVE" ]; then
+  log "Local archive: $LOCAL_ARCHIVE"
+fi
+if [ -n "$LOCAL_CHECKSUMS" ]; then
+  log "Local checksums: $LOCAL_CHECKSUMS"
+fi
 log "Install dir: $INSTALL_DIR"
 log "Binary: $BIN_PATH"
 log "Config: $CONFIG_PATH"
@@ -200,17 +260,40 @@ log "tmux session: $SESSION"
 
 run mkdir -p "$DOWNLOAD_DIR" "$STAGING_DIR" "$BACKUP_DIR" "$(dirname -- "$LOG_PATH")"
 
-download_file "$ARCHIVE_URL" "$ARCHIVE_PATH"
-download_file "$CHECKSUM_URL" "$CHECKSUM_PATH"
+if [ -n "$LOCAL_ARCHIVE" ]; then
+  if [ "$(CDPATH= cd -- "$(dirname -- "$LOCAL_ARCHIVE")" && pwd)/$(basename -- "$LOCAL_ARCHIVE")" != "$ARCHIVE_PATH" ]; then
+    run cp "$LOCAL_ARCHIVE" "$ARCHIVE_PATH"
+  else
+    log "Using local archive already in download dir: $ARCHIVE_PATH"
+  fi
+else
+  download_file "$ARCHIVE_URL" "$ARCHIVE_PATH"
+fi
+
+if [ -n "$LOCAL_CHECKSUMS" ]; then
+  [ -f "$LOCAL_CHECKSUMS" ] || fail "local checksums file not found: $LOCAL_CHECKSUMS"
+  if [ "$(CDPATH= cd -- "$(dirname -- "$LOCAL_CHECKSUMS")" && pwd)/$(basename -- "$LOCAL_CHECKSUMS")" != "$CHECKSUM_PATH" ]; then
+    run cp "$LOCAL_CHECKSUMS" "$CHECKSUM_PATH"
+  else
+    log "Using local checksums already in download dir: $CHECKSUM_PATH"
+  fi
+elif [ -n "$LOCAL_ARCHIVE" ] && [ -f "$(dirname -- "$LOCAL_ARCHIVE")/checksums.txt" ]; then
+  run cp "$(dirname -- "$LOCAL_ARCHIVE")/checksums.txt" "$CHECKSUM_PATH"
+elif [ "$SKIP_CHECKSUM" -eq 0 ]; then
+  download_file "$CHECKSUM_URL" "$CHECKSUM_PATH"
+fi
 
 if [ "$DRY_RUN" -ne 0 ]; then
   log "Dry run complete. No files were changed."
   exit 0
 fi
 
-if command -v sha256sum >/dev/null 2>&1; then
+if [ "$SKIP_CHECKSUM" -eq 1 ]; then
+  log "Skipping checksum verification because --skip-checksum was provided."
+elif command -v sha256sum >/dev/null 2>&1; then
   log "Verifying checksum..."
   if [ "$DRY_RUN" -eq 0 ]; then
+    [ -f "$CHECKSUM_PATH" ] || fail "checksums file not found: $CHECKSUM_PATH"
     (cd "$DOWNLOAD_DIR" && grep "  $ASSET\$" checksums.txt | sha256sum -c -) || fail "checksum verification failed for $ASSET"
   else
     log "+ (cd '$DOWNLOAD_DIR' && grep '  $ASSET$' checksums.txt | sha256sum -c -)"
