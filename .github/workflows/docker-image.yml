@@ -11,9 +11,29 @@ env:
   DOCKERHUB_REPO: ${{ secrets.DOCKERHUB_USERNAME }}/cli-proxy-api-plus
 
 jobs:
+  docker_preflight:
+    runs-on: ubuntu-latest
+    outputs:
+      enabled: ${{ steps.check.outputs.enabled }}
+    steps:
+      - name: Check DockerHub secrets
+        id: check
+        shell: bash
+        env:
+          DOCKERHUB_USERNAME: ${{ secrets.DOCKERHUB_USERNAME }}
+          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: |
+          if [ -n "${DOCKERHUB_USERNAME}" ] && [ -n "${DOCKERHUB_TOKEN}" ]; then
+            echo "enabled=true" >> "${GITHUB_OUTPUT}"
+          else
+            echo "DockerHub secrets are not configured; skipping Docker image publish."
+            echo "enabled=false" >> "${GITHUB_OUTPUT}"
+          fi
+
   docker_amd64:
     runs-on: ubuntu-latest
-    if: ${{ secrets.DOCKERHUB_USERNAME != '' && secrets.DOCKERHUB_TOKEN != '' }}
+    needs: docker_preflight
+    if: ${{ needs.docker_preflight.outputs.enabled == 'true' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -49,7 +69,8 @@ jobs:
 
   docker_arm64:
     runs-on: ubuntu-24.04-arm
-    if: ${{ secrets.DOCKERHUB_USERNAME != '' && secrets.DOCKERHUB_TOKEN != '' }}
+    needs: docker_preflight
+    if: ${{ needs.docker_preflight.outputs.enabled == 'true' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -85,8 +106,9 @@ jobs:
 
   docker_manifest:
     runs-on: ubuntu-latest
-    if: ${{ secrets.DOCKERHUB_USERNAME != '' && secrets.DOCKERHUB_TOKEN != '' }}
+    if: ${{ needs.docker_preflight.outputs.enabled == 'true' }}
     needs:
+      - docker_preflight
       - docker_amd64
       - docker_arm64
     steps:
