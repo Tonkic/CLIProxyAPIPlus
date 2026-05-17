@@ -95,20 +95,35 @@ go build -o cli-proxy-api-plus ./cmd/server
 
 ## CPA Usage Keeper と一緒に起動
 
-Linux:
+release archive には短い Linux helper scripts と keeper env template が含まれます。
+
+```text
+CLIProxyAPIPlus_<version>_linux_<arch>/
+|-- cli-proxy-api-plus
+|-- config.example.yaml
+|-- start.sh
+|-- stop.sh
+|-- restart.sh
+|-- update.sh
+`-- keeper/
+    |-- cpa-usage-keeper
+    `-- .env.example
+```
+
+Initial setup:
 
 ```bash
 cp config.example.yaml config.yaml
 cp keeper/.env.example keeper/.env
-./start-plus-with-keeper.sh
+./start.sh
 ```
 
-Windows PowerShell:
+Service control:
 
-```powershell
-Copy-Item config.example.yaml config.yaml
-Copy-Item keeper\.env.example keeper\.env
-.\start-plus-with-keeper.ps1
+```bash
+./start.sh
+./stop.sh
+./restart.sh
 ```
 
 起動されるサービス:
@@ -118,22 +133,26 @@ Copy-Item keeper\.env.example keeper\.env
 
 ## Update
 
-Linux:
+Private Aliyun OSS mirror から更新する場合は、server に `ossutil` を設定してから実行します。
 
 ```bash
-./update-linux.sh
-./update-linux.sh --tag v7.0.6.1
-./update-linux.sh --no-restart
+./update.sh \
+  --tag v7.1.1.4 \
+  --bucket update-cpa-plus \
+  --endpoint oss-cn-shenzhen.aliyuncs.com
 ```
 
-Windows:
+Install only, then restart manually:
 
-```powershell
-.\update-windows.ps1
-.\update-windows.ps1 -Tag v7.0.6.1
-.\update-windows.ps1 -NoRestart
+```bash
+./update.sh \
+  --tag v7.1.1.4 \
+  --bucket update-cpa-plus \
+  --endpoint oss-cn-shenzhen.aliyuncs.com \
+  --no-restart
+
+./restart.sh
 ```
-
 ## Amp CLI Support
 
 - `/api/provider/{provider}/v1/messages`

@@ -29,12 +29,10 @@ archives:
       - README_CN.md
       - README_JA.md
       - config.example.yaml
-      - start-plus-with-keeper.ps1
-      - start-plus-with-keeper.sh
-      - restart-plus-with-keeper.sh
-      - update-linux.sh
-      - update-linux-oss.sh
-      - update-windows.ps1
+      - start.sh
+      - stop.sh
+      - restart.sh
+      - update.sh
       - src: keeper/.env.example
         dst: keeper/.env.example
       - src: .keeper-dist/{{ .Os }}/{{ .Arch }}/keeper

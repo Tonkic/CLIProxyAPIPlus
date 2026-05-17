@@ -102,20 +102,35 @@ go build -o cli-proxy-api-plus ./cmd/server
 
 ## 与 CPA Usage Keeper 一起运行
 
-Linux：
+release 包包含简短的 Linux 辅助脚本和 keeper 环境变量模板：
+
+```text
+CLIProxyAPIPlus_<version>_linux_<arch>/
+|-- cli-proxy-api-plus
+|-- config.example.yaml
+|-- start.sh
+|-- stop.sh
+|-- restart.sh
+|-- update.sh
+`-- keeper/
+    |-- cpa-usage-keeper
+    `-- .env.example
+```
+
+首次配置：
 
 ```bash
 cp config.example.yaml config.yaml
 cp keeper/.env.example keeper/.env
-./start-plus-with-keeper.sh
+./start.sh
 ```
 
-Windows PowerShell：
+服务控制：
 
-```powershell
-Copy-Item config.example.yaml config.yaml
-Copy-Item keeper\.env.example keeper\.env
-.\start-plus-with-keeper.ps1
+```bash
+./start.sh
+./stop.sh
+./restart.sh
 ```
 
 脚本会启动：
@@ -125,56 +140,35 @@ Copy-Item keeper\.env.example keeper\.env
 
 ## 更新部署
 
-Linux：
+私有阿里云 OSS 镜像更新：先在服务器安装并配置 `ossutil`，然后执行：
 
 ```bash
-./update-linux.sh
-./update-linux.sh --tag v7.0.6.1
-./update-linux.sh --no-restart
-```
-
-私有阿里云 OSS 镜像更新：先在服务器安装并配置 `ossutil`，再从 OSS 下载到本地文件并更新：
-
-```bash
-./update-linux-oss.sh \
-  --tag v7.1.1.1 \
+./update.sh \
+  --tag v7.1.1.4 \
   --bucket update-cpa-plus \
-  --endpoint oss-cn-shenzhen-internal.aliyuncs.com
+  --endpoint oss-cn-shenzhen.aliyuncs.com
 ```
 
-如果要更新后同时重启代理和 keeper 两个 tmux session：
+只更新不重启，然后手动重启：
 
 ```bash
-./update-linux-oss.sh \
-  --tag v7.1.1.2 \
+./update.sh \
+  --tag v7.1.1.4 \
   --bucket update-cpa-plus \
   --endpoint oss-cn-shenzhen.aliyuncs.com \
-  --restart-script ./restart-plus-with-keeper.sh
-```
+  --no-restart
 
-也可以只重启不更新：
-
-```bash
-./restart-plus-with-keeper.sh
+./restart.sh
 ```
 
 也可以用环境变量保存 OSS 配置：
 
 ```bash
 export ALIYUN_OSS_BUCKET=update-cpa-plus
-export ALIYUN_OSS_ENDPOINT=oss-cn-shenzhen-internal.aliyuncs.com
+export ALIYUN_OSS_ENDPOINT=oss-cn-shenzhen.aliyuncs.com
 export ALIYUN_OSS_PREFIX=CLIProxyAPIPlus
-./update-linux-oss.sh --tag v7.1.1.1
+./update.sh --tag v7.1.1.4
 ```
-
-Windows：
-
-```powershell
-.\update-windows.ps1
-.\update-windows.ps1 -Tag v7.0.6.1
-.\update-windows.ps1 -NoRestart
-```
-
 ## Amp CLI 支持
 
 常用 provider 路由：

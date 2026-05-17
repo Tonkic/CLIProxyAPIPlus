@@ -107,35 +107,35 @@ Run the built binary:
 
 ## Running With CPA Usage Keeper
 
-Release archives include helper scripts and the keeper environment template:
+Release archives include short Linux helper scripts and the keeper environment template:
 
 ```text
-CLIProxyAPIPlus_<version>_<os>_<arch>/
+CLIProxyAPIPlus_<version>_linux_<arch>/
 |-- cli-proxy-api-plus
 |-- config.example.yaml
-|-- start-plus-with-keeper.sh
-|-- start-plus-with-keeper.ps1
-|-- update-linux.sh
-|-- update-windows.ps1
+|-- start.sh
+|-- stop.sh
+|-- restart.sh
+|-- update.sh
 `-- keeper/
     |-- cpa-usage-keeper
     `-- .env.example
 ```
 
-Linux:
+Initial setup:
 
 ```bash
 cp config.example.yaml config.yaml
 cp keeper/.env.example keeper/.env
-./start-plus-with-keeper.sh
+./start.sh
 ```
 
-Windows PowerShell:
+Service control:
 
-```powershell
-Copy-Item config.example.yaml config.yaml
-Copy-Item keeper\.env.example keeper\.env
-.\start-plus-with-keeper.ps1
+```bash
+./start.sh
+./stop.sh
+./restart.sh
 ```
 
 The helper starts:
@@ -145,54 +145,34 @@ The helper starts:
 
 ## Deployment Updates
 
-Linux release-directory deployments can update in place:
+For private Aliyun OSS mirrors, install and configure `ossutil`, then update with:
 
 ```bash
-./update-linux.sh
-./update-linux.sh --tag v7.0.6.1
-./update-linux.sh --no-restart
-```
-
-For private Aliyun OSS mirrors, install and configure `ossutil`, then download from OSS and update from local files:
-
-```bash
-./update-linux-oss.sh \
-  --tag v7.1.1.1 \
+./update.sh \
+  --tag v7.1.1.4 \
   --bucket update-cpa-plus \
-  --endpoint oss-cn-shenzhen-internal.aliyuncs.com
+  --endpoint oss-cn-shenzhen.aliyuncs.com
 ```
 
-To update and restart both tmux sessions used by the bundled proxy and keeper deployment:
+To install only and restart manually:
 
 ```bash
-./update-linux-oss.sh \
-  --tag v7.1.1.2 \
+./update.sh \
+  --tag v7.1.1.4 \
   --bucket update-cpa-plus \
   --endpoint oss-cn-shenzhen.aliyuncs.com \
-  --restart-script ./restart-plus-with-keeper.sh
-```
+  --no-restart
 
-You can also restart without updating:
-
-```bash
-./restart-plus-with-keeper.sh
+./restart.sh
 ```
 
 You can also provide OSS settings through environment variables:
 
 ```bash
 export ALIYUN_OSS_BUCKET=update-cpa-plus
-export ALIYUN_OSS_ENDPOINT=oss-cn-shenzhen-internal.aliyuncs.com
+export ALIYUN_OSS_ENDPOINT=oss-cn-shenzhen.aliyuncs.com
 export ALIYUN_OSS_PREFIX=CLIProxyAPIPlus
-./update-linux-oss.sh --tag v7.1.1.1
-```
-
-Windows:
-
-```powershell
-.\update-windows.ps1
-.\update-windows.ps1 -Tag v7.0.6.1
-.\update-windows.ps1 -NoRestart
+./update.sh --tag v7.1.1.4
 ```
 
 ## Amp CLI Support
