@@ -137,7 +137,7 @@ Private Aliyun OSS mirror から更新する場合は、server に `ossutil` を
 
 ```bash
 ./update.sh \
-  --tag v7.1.1.4 \
+  --tag v7.1.19.1 \
   --bucket update-cpa-plus \
   --endpoint oss-cn-shenzhen.aliyuncs.com
 ```
@@ -146,13 +146,14 @@ Install only, then restart manually:
 
 ```bash
 ./update.sh \
-  --tag v7.1.1.4 \
+  --tag v7.1.19.1 \
   --bucket update-cpa-plus \
   --endpoint oss-cn-shenzhen.aliyuncs.com \
   --no-restart
 
 ./restart.sh
 ```
+
 ## Amp CLI Support
 
 - `/api/provider/{provider}/v1/messages`

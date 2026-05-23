@@ -149,7 +149,7 @@ For private Aliyun OSS mirrors, install and configure `ossutil`, then update wit
 
 ```bash
 ./update.sh \
-  --tag v7.1.1.4 \
+  --tag v7.1.19.1 \
   --bucket update-cpa-plus \
   --endpoint oss-cn-shenzhen.aliyuncs.com
 ```
@@ -158,7 +158,7 @@ To install only and restart manually:
 
 ```bash
 ./update.sh \
-  --tag v7.1.1.4 \
+  --tag v7.1.19.1 \
   --bucket update-cpa-plus \
   --endpoint oss-cn-shenzhen.aliyuncs.com \
   --no-restart
@@ -172,7 +172,7 @@ You can also provide OSS settings through environment variables:
 export ALIYUN_OSS_BUCKET=update-cpa-plus
 export ALIYUN_OSS_ENDPOINT=oss-cn-shenzhen.aliyuncs.com
 export ALIYUN_OSS_PREFIX=CLIProxyAPIPlus
-./update.sh --tag v7.1.1.4
+./update.sh --tag v7.1.19.1
 ```
 
 ## Amp CLI Support

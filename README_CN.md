@@ -144,7 +144,7 @@ cp keeper/.env.example keeper/.env
 
 ```bash
 ./update.sh \
-  --tag v7.1.1.4 \
+  --tag v7.1.19.1 \
   --bucket update-cpa-plus \
   --endpoint oss-cn-shenzhen.aliyuncs.com
 ```
@@ -153,7 +153,7 @@ cp keeper/.env.example keeper/.env
 
 ```bash
 ./update.sh \
-  --tag v7.1.1.4 \
+  --tag v7.1.19.1 \
   --bucket update-cpa-plus \
   --endpoint oss-cn-shenzhen.aliyuncs.com \
   --no-restart
@@ -167,8 +167,9 @@ cp keeper/.env.example keeper/.env
 export ALIYUN_OSS_BUCKET=update-cpa-plus
 export ALIYUN_OSS_ENDPOINT=oss-cn-shenzhen.aliyuncs.com
 export ALIYUN_OSS_PREFIX=CLIProxyAPIPlus
-./update.sh --tag v7.1.1.4
+./update.sh --tag v7.1.19.1
 ```
+
 ## Amp CLI 支持
 
 常用 provider 路由：
