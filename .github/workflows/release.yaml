@@ -69,12 +69,25 @@ jobs:
         shell: bash
         env:
           KEEPER_VERSION: v1.8.3
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set -euo pipefail
+          base_url="https://github.com/Willxup/cpa-usage-keeper/releases/download/${KEEPER_VERSION}"
           mkdir -p /tmp/keeper .keeper-dist/linux/amd64/keeper .keeper-dist/linux/arm64/keeper .keeper-dist/windows/amd64/keeper .keeper-dist/windows/arm64/keeper
           for target in linux_amd64 linux_arm64 windows_amd64 windows_arm64; do
-            GH_TOKEN="${GITHUB_TOKEN}" gh release download "${KEEPER_VERSION}" --repo Willxup/cpa-usage-keeper --pattern "cpa-usage-keeper_${KEEPER_VERSION}_${target}.*" --dir /tmp/keeper
+            case "${target}" in
+              linux_*|darwin_*)
+                ext="tar.gz"
+                ;;
+              windows_*)
+                ext="zip"
+                ;;
+              *)
+                echo "unsupported keeper target: ${target}" >&2
+                exit 1
+                ;;
+            esac
+            asset="cpa-usage-keeper_${KEEPER_VERSION}_${target}.${ext}"
+            curl -fL --retry 5 --retry-delay 2 --retry-connrefused "${base_url}/${asset}" -o "/tmp/keeper/${asset}"
           done
           for target in linux_amd64 linux_arm64; do
             workdir="/tmp/keeper/${target}"
