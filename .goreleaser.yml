@@ -41,6 +41,8 @@ builds:
         goarch: arm64
     main: ./cmd/server/
     binary: cli-proxy-api-plus
+    flags:
+      - -buildvcs=false
     ldflags:
       - -s -w -X 'main.Version={{.Version}}-plus' -X 'main.Commit={{.ShortCommit}}' -X 'main.BuildDate={{.Date}}'
 
