@@ -72,7 +72,7 @@ jobs:
       - name: Download CPA Usage Keeper binaries
         shell: bash
         env:
-          KEEPER_VERSION: v1.10.5
+          KEEPER_VERSION: v1.10.7
         run: |
           set -euo pipefail
           base_url="https://github.com/Willxup/cpa-usage-keeper/releases/download/${KEEPER_VERSION}"

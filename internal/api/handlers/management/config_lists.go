@@ -1387,7 +1387,6 @@ func (h *Handler) PutAmpUpstreamAPIKeys(c *gin.Context) {
 		c.JSON(400, gin.H{"error": "invalid body"})
 		return
 	}
-	// Normalize entries: trim whitespace, filter empty
 	normalized := normalizeAmpUpstreamAPIKeyEntries(body.Value)
 	h.cfg.AmpCode.UpstreamAPIKeys = normalized
 	h.persist(c)
@@ -1446,7 +1445,6 @@ func (h *Handler) DeleteAmpUpstreamAPIKeys(c *gin.Context) {
 		return
 	}
 
-	// Empty array means clear all
 	if len(body.Value) == 0 {
 		h.cfg.AmpCode.UpstreamAPIKeys = nil
 		h.persist(c)
@@ -1476,7 +1474,6 @@ func (h *Handler) DeleteAmpUpstreamAPIKeys(c *gin.Context) {
 	h.persist(c)
 }
 
-// normalizeAmpUpstreamAPIKeyEntries normalizes a list of upstream API key entries.
 func normalizeAmpUpstreamAPIKeyEntries(entries []config.AmpUpstreamAPIKeyEntry) []config.AmpUpstreamAPIKeyEntry {
 	if len(entries) == 0 {
 		return nil
@@ -1499,7 +1496,6 @@ func normalizeAmpUpstreamAPIKeyEntries(entries []config.AmpUpstreamAPIKeyEntry) 
 	return out
 }
 
-// normalizeAPIKeysList trims and filters empty strings from a list of API keys.
 func normalizeAPIKeysList(keys []string) []string {
 	if len(keys) == 0 {
 		return nil

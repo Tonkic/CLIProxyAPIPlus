@@ -51,6 +51,19 @@ import (
 
 const oauthCallbackSuccessHTML = `<html><head><meta charset="utf-8"><title>Authentication successful</title><script>setTimeout(function(){window.close();},5000);</script></head><body><h1>Authentication successful!</h1><p>You can close this window.</p><p>This window will close automatically in 5 seconds.</p></body></html>`
 
+var corsExposedResponseHeaders = []string{
+	"X-CPA-VERSION",
+	"X-CPA-COMMIT",
+	"X-CPA-BUILD-DATE",
+	"X-CPA-SUPPORT-PLUGIN",
+	"X-CPA-HOME-VERSION",
+	"X-CPA-HOME-BUILD-DATE",
+	"X-SERVER-VERSION",
+	"X-SERVER-BUILD-DATE",
+}
+
+var corsExposedResponseHeadersJoined = strings.Join(corsExposedResponseHeaders, ", ")
+
 type serverOptionConfig struct {
 	extraMiddleware      []gin.HandlerFunc
 	engineConfigurator   func(*gin.Engine)
@@ -63,6 +76,7 @@ type serverOptionConfig struct {
 	postAuthHook         auth.PostAuthHook
 	postAuthPersistHook  auth.PostAuthHook
 	pluginHost           *pluginhost.Host
+	configReloadHook     func(context.Context, *config.Config)
 }
 
 // ServerOption customises HTTP server construction.
@@ -152,6 +166,13 @@ func WithPostAuthPersistHook(hook auth.PostAuthHook) ServerOption {
 func WithPluginHost(host *pluginhost.Host) ServerOption {
 	return func(cfg *serverOptionConfig) {
 		cfg.pluginHost = host
+	}
+}
+
+// WithConfigReloadHook registers a callback used after management saves config changes.
+func WithConfigReloadHook(hook func(context.Context, *config.Config)) ServerOption {
+	return func(cfg *serverOptionConfig) {
+		cfg.configReloadHook = hook
 	}
 }
 
@@ -325,6 +346,9 @@ func NewServer(cfg *config.Config, authManager *auth.Manager, accessManager *sdk
 	if optionState.postAuthPersistHook != nil {
 		s.mgmt.SetPostAuthPersistHook(optionState.postAuthPersistHook)
 	}
+	if optionState.configReloadHook != nil {
+		s.mgmt.SetConfigReloadHook(optionState.configReloadHook)
+	}
 	s.localPassword = optionState.localPassword
 
 	// Home heartbeat gate: when home is enabled, block all endpoints with 503 until the
@@ -432,7 +456,7 @@ func (s *Server) setupRoutes() {
 		v1.POST("/completions", openaiHandlers.Completions)
 		v1.POST("/images/generations", openaiHandlers.ImagesGenerations)
 		v1.POST("/images/edits", openaiHandlers.ImagesEdits)
-		v1.POST("/videos", openaiHandlers.VideosCreate)
+		v1.POST("/videos", openaiHandlers.XAIVideosGenerations)
 		v1.POST("/videos/generations", openaiHandlers.XAIVideosGenerations)
 		v1.POST("/videos/edits", openaiHandlers.XAIVideosEdits)
 		v1.POST("/videos/extensions", openaiHandlers.XAIVideosExtensions)
@@ -442,6 +466,14 @@ func (s *Server) setupRoutes() {
 		v1.GET("/responses", openaiResponsesHandlers.ResponsesWebsocket)
 		v1.POST("/responses", openaiResponsesHandlers.Responses)
 		v1.POST("/responses/compact", openaiResponsesHandlers.Compact)
+	}
+
+	openaiV1 := s.engine.Group("/openai/v1")
+	openaiV1.Use(AuthMiddleware(s.accessManager))
+	{
+		openaiV1.POST("/videos", openaiHandlers.VideosCreate)
+		openaiV1.GET("/videos/:video_id/content", openaiHandlers.VideosContent)
+		openaiV1.GET("/videos/:video_id", openaiHandlers.VideosRetrieve)
 	}
 
 	// Codex CLI direct route aliases (chatgpt_base_url compatible)
@@ -640,9 +672,11 @@ func (s *Server) registerManagementRoutes() {
 		mgmt.PUT("/config.yaml", s.mgmt.PutConfigYAML)
 		mgmt.GET("/latest-version", s.mgmt.GetLatestVersion)
 		mgmt.GET("/plugins", s.mgmt.ListPlugins)
+		mgmt.GET("/plugins/:id/config", s.mgmt.GetPluginConfig)
 		mgmt.PATCH("/plugins/:id/enabled", s.mgmt.PatchPluginEnabled)
 		mgmt.PUT("/plugins/:id/config", s.mgmt.PutPluginConfig)
 		mgmt.PATCH("/plugins/:id/config", s.mgmt.PatchPluginConfig)
+		mgmt.DELETE("/plugins/:id", s.mgmt.DeletePlugin)
 
 		mgmt.GET("/debug", s.mgmt.GetDebug)
 		mgmt.PUT("/debug", s.mgmt.PutDebug)
@@ -1198,12 +1232,22 @@ func (s *Server) loadHomeModelEntries(c *gin.Context) ([]homeModelEntry, bool) {
 		return nil, false
 	}
 
-	raw, errGet := client.GetModels(c.Request.Context())
+	raw, errGet := client.GetModels(c.Request.Context(), c.Request.Header, c.Request.URL.Query())
 	if errGet != nil {
 		c.JSON(http.StatusBadGateway, handlers.ErrorResponse{
 			Error: handlers.ErrorDetail{
 				Message: errGet.Error(),
 				Type:    "server_error",
+			},
+		})
+		return nil, false
+	}
+
+	if statusCode, ok := homeModelsAuthStatus(raw); ok {
+		c.JSON(statusCode, handlers.ErrorResponse{
+			Error: handlers.ErrorDetail{
+				Message: homeModelsErrorMessage(raw),
+				Type:    "authentication_error",
 			},
 		})
 		return nil, false
@@ -1468,6 +1512,69 @@ func (s *Server) Stop(ctx context.Context) error {
 	return nil
 }
 
+// homeModelsAuthStatus inspects a home models response for an authentication/error envelope.
+// It returns the HTTP status code to surface (401 for credential issues, 502 otherwise)
+// and true when the payload is an error response rather than model data.
+func homeModelsAuthStatus(raw []byte) (int, bool) {
+	errType := homeModelsErrorType(raw)
+	if errType == "" {
+		return 0, false
+	}
+	if errType == "no_credentials" || errType == "invalid_credential" {
+		return http.StatusUnauthorized, true
+	}
+	return http.StatusBadGateway, true
+}
+
+func homeModelsErrorType(raw []byte) string {
+	top, ok := unmarshalHomeModelsTopLevel(raw)
+	if !ok {
+		return ""
+	}
+	rawErr, exists := top["error"]
+	if !exists {
+		return ""
+	}
+	errObj, ok := rawErr.(map[string]any)
+	if !ok {
+		return ""
+	}
+	if typ, _ := errObj["type"].(string); typ != "" {
+		return strings.TrimSpace(typ)
+	}
+	return ""
+}
+
+func homeModelsErrorMessage(raw []byte) string {
+	top, ok := unmarshalHomeModelsTopLevel(raw)
+	if !ok {
+		return "home models request failed"
+	}
+	rawErr, exists := top["error"]
+	if !exists {
+		return "home models request failed"
+	}
+	errObj, ok := rawErr.(map[string]any)
+	if !ok {
+		return "home models request failed"
+	}
+	if msg, _ := errObj["message"].(string); strings.TrimSpace(msg) != "" {
+		return strings.TrimSpace(msg)
+	}
+	return "home models request failed"
+}
+
+func unmarshalHomeModelsTopLevel(raw []byte) (map[string]any, bool) {
+	if len(raw) == 0 {
+		return nil, false
+	}
+	var top map[string]any
+	if err := json.Unmarshal(raw, &top); err != nil {
+		return nil, false
+	}
+	return top, true
+}
+
 // corsMiddleware returns a Gin middleware handler that adds CORS headers
 // to every response, allowing cross-origin requests.
 //
@@ -1478,6 +1585,7 @@ func corsMiddleware() gin.HandlerFunc {
 		c.Header("Access-Control-Allow-Origin", "*")
 		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
 		c.Header("Access-Control-Allow-Headers", "*")
+		c.Header("Access-Control-Expose-Headers", corsExposedResponseHeadersJoined)
 
 		if c.Request.Method == "OPTIONS" {
 			c.AbortWithStatus(http.StatusNoContent)
