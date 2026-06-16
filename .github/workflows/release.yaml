@@ -69,6 +69,71 @@ jobs:
           echo "COMMIT=$(git rev-parse --short HEAD)" >> "$GITHUB_ENV"
           echo "BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_ENV"
 
+      - name: Sync Codex CLI version defaults
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          auth_header=()
+          if [ -n "${GH_TOKEN:-}" ]; then
+            auth_header=(-H "Authorization: Bearer ${GH_TOKEN}")
+          fi
+
+          release_json="$(curl -fsSL \
+            -H "Accept: application/vnd.github+json" \
+            "${auth_header[@]}" \
+            https://api.github.com/repos/openai/codex/releases/latest)"
+
+          codex_version="$(python3 -c 'import json, re, sys
+data = json.load(sys.stdin)
+tag = str(data.get("tag_name", "")).strip()
+name = str(data.get("name", "")).strip()
+for candidate in (tag, name):
+    match = re.search(r"(?<![0-9])([0-9]+\.[0-9]+\.[0-9]+)(?![0-9])", candidate)
+    if match:
+        print(match.group(1))
+        break
+else:
+    raise SystemExit(f"invalid openai/codex release tag/name: {tag!r} / {name!r}")
+' <<< "${release_json}")"
+
+          echo "Using openai/codex ${codex_version} for Codex client defaults."
+          python3 - "${codex_version}" <<'PY'
+import pathlib
+import re
+import sys
+
+version = sys.argv[1]
+tui_ua = f"codex-tui/{version} (Mac OS 26.5.0; arm64) iTerm.app/3.6.10 (codex-tui; {version})"
+cli_ua = f"codex_cli_rs/{version} (Mac OS 14.2.0; arm64) vscode/1.111.0"
+
+executor = pathlib.Path("internal/runtime/executor/codex_executor.go")
+text = executor.read_text(encoding="utf-8")
+text, count = re.subn(
+    r'codexUserAgent\s*=\s*"[^"]+"',
+    f'codexUserAgent             = "{tui_ua}"',
+    text,
+    count=1,
+)
+if count != 1:
+    raise SystemExit("failed to update codexUserAgent")
+executor.write_text(text, encoding="utf-8")
+
+config = pathlib.Path("config.example.yaml")
+text = config.read_text(encoding="utf-8")
+text, count = re.subn(
+    r'(#\s+user-agent:\s+)"codex_cli_rs/[0-9]+\.[0-9]+\.[0-9]+ \([^"]+\)"',
+    rf'\1"{cli_ua}"',
+    text,
+    count=1,
+)
+if count != 1:
+    raise SystemExit("failed to update config.example.yaml codex user-agent")
+config.write_text(text, encoding="utf-8")
+PY
+
       - name: Download CPA Usage Keeper binaries
         shell: bash
         env:
