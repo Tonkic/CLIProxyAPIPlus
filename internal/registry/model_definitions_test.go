@@ -171,7 +171,6 @@ func validTestModelsCatalog() *staticModelsJSON {
 		Claude:      models,
 		Gemini:      models,
 		Vertex:      models,
-		GeminiCLI:   models,
 		AIStudio:    models,
 		CodexFree:   models,
 		CodexTeam:   models,

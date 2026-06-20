@@ -80,6 +80,13 @@ type Config struct {
 	// DisableCooling disables quota cooldown scheduling when true.
 	DisableCooling bool `yaml:"disable-cooling" json:"disable-cooling"`
 
+	// SaveCooldownStatus persists runtime cooldown status next to auth files when true.
+	SaveCooldownStatus bool `yaml:"save-cooldown-status" json:"save-cooldown-status"`
+
+	// TransientErrorCooldownSeconds controls cooldowns for transient upstream errors.
+	// 0 keeps the legacy default cooldown. Negative values disable these cooldowns.
+	TransientErrorCooldownSeconds int `yaml:"transient-error-cooldown-seconds" json:"transient-error-cooldown-seconds"`
+
 	// AuthAutoRefreshWorkers overrides the size of the core auth auto-refresh worker pool.
 	// When <= 0, the default worker count is used.
 	AuthAutoRefreshWorkers int `yaml:"auth-auto-refresh-workers" json:"auth-auto-refresh-workers"`
@@ -194,7 +201,7 @@ type PluginsConfig struct {
 
 // PluginInstanceConfig stores host-owned plugin settings and the original plugin YAML subtree.
 type PluginInstanceConfig struct {
-	// Enabled toggles this plugin instance. Nil is normalized to true during YAML parsing.
+	// Enabled toggles this plugin instance. Nil is normalized to false during YAML parsing.
 	Enabled *bool `yaml:"enabled,omitempty" json:"enabled,omitempty"`
 	// Priority controls plugin startup and routing order.
 	Priority int `yaml:"priority,omitempty" json:"priority,omitempty"`
@@ -209,7 +216,7 @@ func (c *PluginInstanceConfig) UnmarshalYAML(value *yaml.Node) error {
 	}
 
 	c.Priority = 0
-	defaultEnabled := true
+	defaultEnabled := false
 	c.Enabled = &defaultEnabled
 
 	if value == nil || value.Kind == 0 {
@@ -529,6 +536,9 @@ type ClaudeKey struct {
 	// ExcludedModels lists model IDs that should be excluded for this provider.
 	ExcludedModels []string `yaml:"excluded-models,omitempty" json:"excluded-models,omitempty"`
 
+	// RebuildMidSystemMessage moves Claude messages with role "system" into the top-level system field.
+	RebuildMidSystemMessage bool `yaml:"rebuild-mid-system-message,omitempty" json:"rebuild-mid-system-message,omitempty"`
+
 	// DisableCooling disables auth/model cooldown scheduling for this credential when true.
 	DisableCooling bool `yaml:"disable-cooling,omitempty" json:"disable-cooling,omitempty"`
 
@@ -810,6 +820,8 @@ func LoadConfigOptional(configFile string, optional bool) (*Config, error) {
 	cfg.UsageStatisticsEnabled = false
 	cfg.RedisUsageQueueRetentionSeconds = 60
 	cfg.DisableCooling = false
+	cfg.SaveCooldownStatus = false
+	cfg.TransientErrorCooldownSeconds = 0
 	cfg.DisableImageGeneration = DisableImageGenerationOff
 	cfg.Pprof.Enable = false
 	cfg.Pprof.Addr = DefaultPprofAddr
@@ -1736,14 +1748,25 @@ func isZeroValueNode(node *yaml.Node) bool {
 
 // deepCopyNode creates a deep copy of a yaml.Node graph.
 func deepCopyNode(n *yaml.Node) *yaml.Node {
+	return deepCopyNodeSeen(n, map[*yaml.Node]*yaml.Node{})
+}
+
+func deepCopyNodeSeen(n *yaml.Node, seen map[*yaml.Node]*yaml.Node) *yaml.Node {
 	if n == nil {
 		return nil
 	}
+	if cp, ok := seen[n]; ok {
+		return cp
+	}
 	cp := *n
+	seen[n] = &cp
+	if n.Alias != nil {
+		cp.Alias = deepCopyNodeSeen(n.Alias, seen)
+	}
 	if len(n.Content) > 0 {
 		cp.Content = make([]*yaml.Node, len(n.Content))
 		for i := range n.Content {
-			cp.Content[i] = deepCopyNode(n.Content[i])
+			cp.Content[i] = deepCopyNodeSeen(n.Content[i], seen)
 		}
 	}
 	return &cp
