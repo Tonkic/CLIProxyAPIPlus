@@ -17,7 +17,6 @@ permissions:
 jobs:
   goreleaser:
     runs-on: ubuntu-latest
-    if: github.repository == 'Tonkic/CLIProxyAPIPlus'
     steps:
       - uses: actions/checkout@v4
         with:
