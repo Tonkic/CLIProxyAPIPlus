@@ -1,15 +1,15 @@
 name: release-plus
 
-"on":
-  push:
-    tags:
-      - 'v*'
+on:
   workflow_dispatch:
     inputs:
       version:
         description: 'Release version, for example v6.10.9.1'
         required: true
         type: string
+  push:
+    tags:
+      - v*
 
 permissions:
   contents: write
