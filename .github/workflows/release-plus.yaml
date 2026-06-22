@@ -123,7 +123,7 @@ jobs:
           config = pathlib.Path("config.example.yaml")
           text = config.read_text(encoding="utf-8")
           text, count = re.subn(
-              r'(#\s+user-agent:\s+)"codex_cli_rs/[0-9]+\.[0-9]+\.[0-9]+ \([^"]+\)"',
+              r'(?m)^(\s*#\s+user-agent:\s+)"codex_cli_rs/[^"]+"',
               rf'\1"{cli_ua}"',
               text,
               count=1,
