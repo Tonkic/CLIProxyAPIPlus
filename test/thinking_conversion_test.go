@@ -12,6 +12,7 @@ import (
 	_ "github.com/router-for-me/CLIProxyAPI/v7/internal/thinking/provider/claude"
 	_ "github.com/router-for-me/CLIProxyAPI/v7/internal/thinking/provider/codex"
 	_ "github.com/router-for-me/CLIProxyAPI/v7/internal/thinking/provider/gemini"
+	_ "github.com/router-for-me/CLIProxyAPI/v7/internal/thinking/provider/interactions"
 	_ "github.com/router-for-me/CLIProxyAPI/v7/internal/thinking/provider/kimi"
 	_ "github.com/router-for-me/CLIProxyAPI/v7/internal/thinking/provider/openai"
 
@@ -2339,6 +2340,30 @@ func TestThinkingE2EMatrix_Body(t *testing.T) {
 			expectField: "reasoning.effort",
 			expectValue: "low",
 			expectErr:   false,
+		},
+
+		// Interactions target: native API uses generation_config.thinking_level and thinking_summaries.
+		{
+			name:         "I1",
+			from:         "interactions",
+			to:           "interactions",
+			model:        "gemini-zero-mixed-model",
+			inputJSON:    `{"model":"gemini-zero-mixed-model","generation_config":{"thinking_level":"high","thinking_summaries":"auto"},"input":"hi"}`,
+			expectField:  "generation_config.thinking_level",
+			expectValue:  "high",
+			expectField2: "generation_config.thinking_summaries",
+			expectValue2: "auto",
+		},
+		{
+			name:         "I2",
+			from:         "interactions",
+			to:           "interactions",
+			model:        "gemini-zero-mixed-model(8192)",
+			inputJSON:    `{"model":"gemini-zero-mixed-model(8192)","input":"hi"}`,
+			expectField:  "generation_config.thinking_level",
+			expectValue:  "medium",
+			expectField2: "generation_config.thinking_summaries",
+			expectValue2: "auto",
 		},
 	}
 
