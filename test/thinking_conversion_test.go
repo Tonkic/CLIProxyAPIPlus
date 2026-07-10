@@ -1129,8 +1129,9 @@ func TestThinkingE2EMatrix_Suffix(t *testing.T) {
 			to:          "github-copilot",
 			model:       "gpt-5(xhigh)",
 			inputJSON:   `{"model":"gpt-5(xhigh)","messages":[{"role":"user","content":"hi"}]}`,
-			expectField: "",
-			expectErr:   true,
+			expectField: "reasoning_effort",
+			expectValue: "high",
+			expectErr:   false,
 		},
 		// Case 117: Claude to gpt-5.1, budget 0 → none (ZeroAllowed=true)
 		{
@@ -2280,8 +2281,9 @@ func TestThinkingE2EMatrix_Body(t *testing.T) {
 			to:          "github-copilot",
 			model:       "gpt-5",
 			inputJSON:   `{"model":"gpt-5","messages":[{"role":"user","content":"hi"}],"reasoning_effort":"xhigh"}`,
-			expectField: "",
-			expectErr:   true,
+			expectField: "reasoning_effort",
+			expectValue: "high",
+			expectErr:   false,
 		},
 		// Case 117: Claude to gpt-5.1, thinking.budget_tokens=0 → none (ZeroAllowed=true)
 		{
@@ -2863,6 +2865,33 @@ func TestThinkingE2EClaudeAdaptive_Body(t *testing.T) {
 			model:     "claude-sonnet-4-6-model",
 			inputJSON: `{"model":"claude-sonnet-4-6-model","messages":[{"role":"user","content":"hi"}],"thinking":{"type":"adaptive"},"output_config":{"effort":"xhigh"}}`,
 			expectErr: true,
+		},
+		// Kimi models exposed via Claude-compatible /v1/messages keep wire format
+		// claude→claude, but the model type is kimi. Claude Code often sends
+		// effort=max; preserve the Claude-compatible wire value.
+		{
+			name:         "C28",
+			from:         "claude",
+			to:           "claude",
+			model:        "kimi-level-model",
+			inputJSON:    `{"model":"kimi-level-model","messages":[{"role":"user","content":"hi"}],"thinking":{"type":"adaptive"},"output_config":{"effort":"max"}}`,
+			expectField:  "thinking.type",
+			expectValue:  "adaptive",
+			expectField2: "output_config.effort",
+			expectValue2: "max",
+			expectErr:    false,
+		},
+		{
+			name:         "C29",
+			from:         "claude",
+			to:           "claude",
+			model:        "kimi-level-model",
+			inputJSON:    `{"model":"kimi-level-model","messages":[{"role":"user","content":"hi"}],"thinking":{"type":"adaptive"},"output_config":{"effort":"xhigh"}}`,
+			expectField:  "thinking.type",
+			expectValue:  "adaptive",
+			expectField2: "output_config.effort",
+			expectValue2: "xhigh",
+			expectErr:    false,
 		},
 	}
 
