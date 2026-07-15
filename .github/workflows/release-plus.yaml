@@ -136,7 +136,7 @@ jobs:
       - name: Download CPA Usage Keeper binaries
         shell: bash
         env:
-          KEEPER_VERSION: v1.13.1
+          KEEPER_VERSION: v1.13.2
         run: |
           set -euo pipefail
           base_url="https://github.com/Willxup/cpa-usage-keeper/releases/download/${KEEPER_VERSION}"
@@ -198,6 +198,7 @@ jobs:
           OSS_ENDPOINT: ${{ secrets.ALIYUN_OSS_ENDPOINT }}
           OSS_BUCKET: ${{ secrets.ALIYUN_OSS_BUCKET }}
           OSS_PREFIX: ${{ vars.ALIYUN_OSS_PREFIX }}
+          OSS_KEEP_RELEASES: ${{ vars.ALIYUN_OSS_KEEP_RELEASES }}
         run: |
           set -euo pipefail
 
@@ -219,5 +220,38 @@ jobs:
             name="$(basename "${file}")"
             "${OSSUTIL}" cp "${file}" "${target}/${name}" -f -e "${OSS_ENDPOINT}" -i "${OSS_ACCESS_KEY_ID}" -k "${OSS_ACCESS_KEY_SECRET}"
           done < <(find dist -maxdepth 1 -type f \( -name '*.tar.gz' -o -name '*.zip' -o -name 'checksums.txt' \) | sort)
+
+          keep_releases="${OSS_KEEP_RELEASES:-3}"
+          if ! [[ "${keep_releases}" =~ ^[1-9][0-9]*$ ]]; then
+            echo "Invalid OSS_KEEP_RELEASES: ${keep_releases}" >&2
+            exit 1
+          fi
+
+          base="oss://${OSS_BUCKET}/${prefix}/"
+          mapfile -t versions < <(
+            "${OSSUTIL}" ls "${base}" -e "${OSS_ENDPOINT}" -i "${OSS_ACCESS_KEY_ID}" -k "${OSS_ACCESS_KEY_SECRET}" |
+              awk -v base="${base}" '
+                index($NF, base) == 1 {
+                  relative = substr($NF, length(base) + 1)
+                  split(relative, parts, "/")
+                  if (parts[1] ~ /^v[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+([-.][0-9A-Za-z.-]+)?$/) {
+                    print parts[1]
+                  }
+                }
+              ' | sort -Vu
+          )
+
+          delete_count=$((${#versions[@]} - keep_releases))
+          if [ "${delete_count}" -gt 0 ]; then
+            echo "Keeping the newest ${keep_releases} OSS releases; deleting ${delete_count} older release(s)."
+            for ((index = 0; index < delete_count; index++)); do
+              old_version="${versions[index]}"
+              old_target="${base}${old_version}/"
+              echo "Deleting old OSS release: ${old_target}"
+              "${OSSUTIL}" rm "${old_target}" -r -f -e "${OSS_ENDPOINT}" -i "${OSS_ACCESS_KEY_ID}" -k "${OSS_ACCESS_KEY_SECRET}"
+            done
+          else
+            echo "OSS release count (${#versions[@]}) is within the retention limit (${keep_releases})."
+          fi
 
           echo "OSS sync complete."
