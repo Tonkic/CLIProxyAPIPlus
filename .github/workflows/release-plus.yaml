@@ -193,6 +193,12 @@ jobs:
           COMMIT: ${{ env.COMMIT }}
           BUILD_DATE: ${{ env.BUILD_DATE }}
 
+      - name: Upload standalone updater
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${VERSION}" update.sh --repo "${GITHUB_REPOSITORY}" --clobber
+
       - name: Sync release assets to Aliyun OSS
         shell: bash
         env:
@@ -219,6 +225,7 @@ jobs:
           target="oss://${OSS_BUCKET}/${prefix}/${VERSION}"
 
           echo "Uploading release assets to ${target}/"
+          "${OSSUTIL}" cp update.sh "${target}/update.sh" -f -e "${OSS_ENDPOINT}" -i "${OSS_ACCESS_KEY_ID}" -k "${OSS_ACCESS_KEY_SECRET}"
           while IFS= read -r file; do
             name="$(basename "${file}")"
             "${OSSUTIL}" cp "${file}" "${target}/${name}" -f -e "${OSS_ENDPOINT}" -i "${OSS_ACCESS_KEY_ID}" -k "${OSS_ACCESS_KEY_SECRET}"

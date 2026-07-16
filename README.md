@@ -139,13 +139,24 @@ The manager keeps persistent state in `manager/data/` and `manager/config.json`.
 
 When upgrading from a Keeper-based release, `restart.sh` stops the legacy `keeper` tmux session but leaves the entire `keeper/` directory untouched. Do not run Keeper and CPA-Manager-Plus at the same time because both consume the same in-memory usage queue. Their SQLite schemas are incompatible, so historical Keeper data must be exported and imported rather than copied over the manager database.
 
+Keeper-based releases use an older updater. Before the first migration, replace it with the standalone updater mirrored to OSS:
+
+```bash
+ossutil cp \
+  oss://update-cpa-plus/CLIProxyAPIPlus/v7.2.80.2/update.sh \
+  ./update.sh.new \
+  -f -e oss-cn-shenzhen.aliyuncs.com
+chmod +x ./update.sh.new
+mv -f ./update.sh.new ./update.sh
+```
+
 ## Deployment Updates
 
 For private Aliyun OSS mirrors, install and configure `ossutil`, then update with:
 
 ```bash
 ./update.sh \
-  --tag v7.2.80.1 \
+  --tag v7.2.80.2 \
   --bucket update-cpa-plus \
   --endpoint oss-cn-shenzhen.aliyuncs.com
 ```
@@ -154,7 +165,7 @@ To install only and restart manually:
 
 ```bash
 ./update.sh \
-  --tag v7.2.80.1 \
+  --tag v7.2.80.2 \
   --bucket update-cpa-plus \
   --endpoint oss-cn-shenzhen.aliyuncs.com \
   --no-restart
@@ -168,7 +179,7 @@ You can also provide OSS settings through environment variables:
 export ALIYUN_OSS_BUCKET=update-cpa-plus
 export ALIYUN_OSS_ENDPOINT=oss-cn-shenzhen.aliyuncs.com
 export ALIYUN_OSS_PREFIX=CLIProxyAPIPlus
-./update.sh --tag v7.2.80.1
+./update.sh --tag v7.2.80.2
 ```
 
 ## Amp CLI Support

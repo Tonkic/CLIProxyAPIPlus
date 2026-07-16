@@ -20,7 +20,7 @@ Usage: update.sh --tag VERSION [options]
 Update CLIProxyAPI Plus from Aliyun OSS or local release files, then restart services.
 
 Options:
-  --tag VERSION          Release tag, for example v7.2.80.1.
+  --tag VERSION          Release tag, for example v7.2.80.2.
   --bucket NAME          OSS bucket. Can also be set with ALIYUN_OSS_BUCKET.
   --prefix PREFIX        OSS prefix. Defaults to CLIProxyAPIPlus.
   --endpoint ENDPOINT    OSS endpoint. Can also be set with ALIYUN_OSS_ENDPOINT.
@@ -33,7 +33,7 @@ Options:
   --help                 Show this help.
 
 Example:
-  ./update.sh --tag v7.2.80.1 --bucket update-cpa-plus --endpoint oss-cn-shenzhen.aliyuncs.com
+  ./update.sh --tag v7.2.80.2 --bucket update-cpa-plus --endpoint oss-cn-shenzhen.aliyuncs.com
 EOF
 }
 
@@ -130,9 +130,10 @@ NEW_BIN=$(find "$STAGING_DIR" -type f -name cli-proxy-api-plus 2>/dev/null | hea
 [ -f "$ROOT/cli-proxy-api-plus" ] && run cp "$ROOT/cli-proxy-api-plus" "$BACKUP_DIR/cli-proxy-api-plus"
 install_executable "$NEW_BIN" "$ROOT/cli-proxy-api-plus"
 
-for file in start.sh stop.sh restart.sh update.sh README.md README_CN.md README_JA.md config.example.yaml; do
+for file in start.sh stop.sh restart.sh README.md README_CN.md README_JA.md config.example.yaml; do
   [ -f "$STAGING_DIR/$file" ] && run cp "$STAGING_DIR/$file" "$ROOT/$file"
 done
+[ -f "$STAGING_DIR/update.sh" ] && install_executable "$STAGING_DIR/update.sh" "$ROOT/update.sh"
 
 NEW_MANAGER_BIN=$(find "$STAGING_DIR" -type f -path '*/manager/cpa-manager-plus' 2>/dev/null | head -n 1 || true)
 if [ -n "$NEW_MANAGER_BIN" ]; then

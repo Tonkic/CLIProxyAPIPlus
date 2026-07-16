@@ -62,11 +62,20 @@ LOG_DIR=${LOG_DIR:-"$ROOT/logs"}
 BIN="$ROOT/cli-proxy-api-plus"
 MANAGER_DIR="$ROOT/manager"
 MANAGER_BIN="$MANAGER_DIR/cpa-manager-plus"
+STAGED_MANAGER_BIN="$ROOT/.update/staging/manager/cpa-manager-plus"
 
 need_cmd tmux
 [ -x "$BIN" ] || fail "binary not found or not executable: $BIN"
 [ -f "$CONFIG" ] || fail "config not found: $CONFIG"
-[ -x "$MANAGER_BIN" ] || fail "manager binary not found or not executable: $MANAGER_BIN"
+if [ ! -x "$MANAGER_BIN" ]; then
+  [ -f "$STAGED_MANAGER_BIN" ] || fail "manager binary not found or not executable: $MANAGER_BIN"
+  log "Installing CPA-Manager-Plus from the staged release..."
+  manager_tmp="${MANAGER_BIN}.new.$$"
+  run mkdir -p "$MANAGER_DIR"
+  run cp "$STAGED_MANAGER_BIN" "$manager_tmp"
+  run chmod +x "$manager_tmp"
+  run mv -f "$manager_tmp" "$MANAGER_BIN"
+fi
 tmux has-session -t "$CLI_SESSION" 2>/dev/null && fail "tmux session already exists: $CLI_SESSION"
 tmux has-session -t "$MANAGER_SESSION" 2>/dev/null && fail "tmux session already exists: $MANAGER_SESSION"
 
