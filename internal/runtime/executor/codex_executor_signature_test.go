@@ -3,9 +3,11 @@ package executor
 import (
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"testing"
 
 	"github.com/router-for-me/CLIProxyAPI/v7/internal/config"
@@ -140,5 +142,65 @@ func TestCodexExecutorCompactDropsInvalidReasoningEncryptedContentFromFinalReque
 	}
 	if gjson.GetBytes(gotBody, "input.0.encrypted_content").Exists() {
 		t.Fatalf("invalid compact reasoning encrypted_content exists, want removed; body=%s", string(gotBody))
+	}
+}
+
+func TestCodexExecutorDropsEmptyReasoningSignaturesFromLargeFinalRequest(t *testing.T) {
+	var gotBody []byte
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, errRead := io.ReadAll(r.Body)
+		if errRead != nil {
+			t.Fatalf("read body: %v", errRead)
+		}
+		gotBody = body
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte("data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_1\",\"object\":\"response\",\"created_at\":0,\"status\":\"completed\",\"background\":false,\"error\":null}}\n\n"))
+	}))
+	defer server.Close()
+
+	items := make([]map[string]any, 0, 1701)
+	for i := 0; i < 1700; i++ {
+		items = append(items, map[string]any{
+			"id":                "rs_" + strconv.Itoa(i),
+			"type":              "reasoning",
+			"encrypted_content": "",
+			"summary":           []any{},
+		})
+	}
+	items = append(items, map[string]any{"role": "user", "content": "hello"})
+	payload, errMarshal := json.Marshal(map[string]any{"model": "gpt-5.4", "input": items})
+	if errMarshal != nil {
+		t.Fatalf("marshal payload: %v", errMarshal)
+	}
+
+	executor := NewCodexExecutor(&config.Config{})
+	_, err := executor.Execute(context.Background(), newCodexSignatureTestAuth(server.URL), cliproxyexecutor.Request{
+		Model:   "gpt-5.4",
+		Payload: payload,
+	}, cliproxyexecutor.Options{
+		SourceFormat: sdktranslator.FromString("openai-response"),
+		Stream:       false,
+	})
+	if err != nil {
+		t.Fatalf("Execute error: %v", err)
+	}
+
+	input := gjson.GetBytes(gotBody, "input").Array()
+	if len(input) != 1701 {
+		t.Fatalf("input length = %d, want 1701", len(input))
+	}
+	for i, item := range input[:1700] {
+		if item.Get("encrypted_content").Exists() {
+			t.Fatalf("input[%d] retained empty encrypted_content", i)
+		}
+		if item.Get("id").Exists() {
+			t.Fatalf("input[%d] retained orphan reasoning id", i)
+		}
+	}
+	if got := input[1700].Get("role").String(); got != "user" {
+		t.Fatalf("final input role = %q, want user", got)
+	}
+	if got := input[1700].Get("content").String(); got != "hello" {
+		t.Fatalf("final input content = %q, want hello", got)
 	}
 }
