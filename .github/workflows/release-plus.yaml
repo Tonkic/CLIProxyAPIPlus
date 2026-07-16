@@ -133,49 +133,52 @@ jobs:
           config.write_text(text, encoding="utf-8")
           PY
 
-      - name: Download CPA Usage Keeper binaries
+      - name: Download CPA-Manager-Plus binaries
         shell: bash
         env:
-          KEEPER_VERSION: v1.13.2
+          GH_TOKEN: ${{ github.token }}
+          MANAGER_VERSION: v1.11.2
         run: |
           set -euo pipefail
-          base_url="https://github.com/Willxup/cpa-usage-keeper/releases/download/${KEEPER_VERSION}"
-          mkdir -p /tmp/keeper .keeper-dist/linux/amd64/keeper .keeper-dist/linux/arm64/keeper .keeper-dist/windows/amd64/keeper .keeper-dist/windows/arm64/keeper
+          base_url="https://github.com/seakee/CPA-Manager-Plus/releases/download/${MANAGER_VERSION}"
+          release_assets=$(gh release view "${MANAGER_VERSION}" --repo seakee/CPA-Manager-Plus --json assets --jq '.assets[].name')
+          mkdir -p /tmp/manager .manager-dist/linux/amd64/manager .manager-dist/linux/arm64/manager .manager-dist/windows/amd64/manager .manager-dist/windows/arm64/manager
           for target in linux_amd64 linux_arm64 windows_amd64 windows_arm64; do
             case "${target}" in
-              linux_*|darwin_*)
+              linux_*)
                 ext="tar.gz"
                 ;;
               windows_*)
                 ext="zip"
                 ;;
               *)
-                echo "unsupported keeper target: ${target}" >&2
+                echo "unsupported manager target: ${target}" >&2
                 exit 1
                 ;;
             esac
-            asset="cpa-usage-keeper_${KEEPER_VERSION}_${target}.${ext}"
-            curl -fL --retry 5 --retry-delay 2 --retry-connrefused "${base_url}/${asset}" -o "/tmp/keeper/${asset}"
+            asset="cpa-manager-plus_${MANAGER_VERSION}_${target}.${ext}"
+            printf '%s\n' "${release_assets}" | grep -Fx "${asset}" >/dev/null
+            curl -fL --retry 5 --retry-delay 2 --retry-connrefused "${base_url}/${asset}" -o "/tmp/manager/${asset}"
           done
           for target in linux_amd64 linux_arm64; do
-            workdir="/tmp/keeper/${target}"
+            workdir="/tmp/manager/${target}"
             mkdir -p "${workdir}"
-            tar -xzf "/tmp/keeper/cpa-usage-keeper_${KEEPER_VERSION}_${target}.tar.gz" -C "${workdir}"
-            keeper_bin=$(find "${workdir}" -type f -name cpa-usage-keeper | head -n 1)
-            test -n "${keeper_bin}"
+            tar -xzf "/tmp/manager/cpa-manager-plus_${MANAGER_VERSION}_${target}.tar.gz" -C "${workdir}"
+            manager_bin=$(find "${workdir}" -type f -name cpa-manager-plus | head -n 1)
+            test -n "${manager_bin}"
             os=${target%_*}
             arch=${target#*_}
-            cp "${keeper_bin}" ".keeper-dist/${os}/${arch}/keeper/cpa-usage-keeper"
+            cp "${manager_bin}" ".manager-dist/${os}/${arch}/manager/cpa-manager-plus"
           done
           for target in windows_amd64 windows_arm64; do
-            workdir="/tmp/keeper/${target}"
+            workdir="/tmp/manager/${target}"
             mkdir -p "${workdir}"
-            unzip -q "/tmp/keeper/cpa-usage-keeper_${KEEPER_VERSION}_${target}.zip" -d "${workdir}"
-            keeper_bin=$(find "${workdir}" -type f -name cpa-usage-keeper.exe | head -n 1)
-            test -n "${keeper_bin}"
+            unzip -q "/tmp/manager/cpa-manager-plus_${MANAGER_VERSION}_${target}.zip" -d "${workdir}"
+            manager_bin=$(find "${workdir}" -type f -name cpa-manager-plus.exe | head -n 1)
+            test -n "${manager_bin}"
             os=${target%_*}
             arch=${target#*_}
-            cp "${keeper_bin}" ".keeper-dist/${os}/${arch}/keeper/cpa-usage-keeper.exe"
+            cp "${manager_bin}" ".manager-dist/${os}/${arch}/manager/cpa-manager-plus.exe"
           done
 
       - name: Run GoReleaser

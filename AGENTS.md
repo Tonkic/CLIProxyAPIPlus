@@ -1,12 +1,12 @@
 # AGENTS.md
 
-Go 1.26+ proxy server providing OpenAI/Gemini/Claude/Codex-compatible APIs with OAuth, multi-provider routing, round-robin load balancing, and Redis-compatible usage export for CPA Usage Keeper.
+Go 1.26+ proxy server providing OpenAI/Gemini/Claude/Codex-compatible APIs with OAuth, multi-provider routing, round-robin load balancing, and Redis-compatible usage export for CPA-Manager-Plus.
 
 ## Repository
 
 - Upstream core: https://github.com/router-for-me/CLIProxyAPI
 - Plus fork: https://github.com/Tonkic/CLIProxyAPIPlus
-- Usage collector bundled in releases: https://github.com/Willxup/cpa-usage-keeper
+- Management and usage dashboard bundled in releases: https://github.com/seakee/CPA-Manager-Plus
 
 ## Commands
 
@@ -34,7 +34,7 @@ Common flags: `--config <path>`, `--tui`, `--standalone`, `--local-model`, `--no
 - `cmd/server/`: CLI entrypoint and login/server mode selection.
 - `internal/api/`: Gin HTTP API, middleware, management API, protocol multiplexer.
 - `internal/api/modules/amp/`: Amp route aliases and reverse proxy support.
-- `internal/redisqueue/`: Redis-compatible in-memory usage queue consumed by CPA Usage Keeper.
+- `internal/redisqueue/`: Redis-compatible in-memory usage queue consumed by CPA-Manager-Plus.
 - `internal/runtime/executor/`: provider executors and executor tests.
 - `internal/runtime/executor/helps/`: shared executor helpers, including usage reporting.
 - `internal/thinking/`: canonical thinking config pipeline. Keep the architecture as canonical representation to provider-specific translation.
@@ -46,7 +46,7 @@ Common flags: `--config <path>`, `--tui`, `--standalone`, `--local-model`, `--no
 - `internal/wsrelay/`: WebSocket relay sessions.
 - `sdk/cliproxy/`: embeddable proxy service, builder, watchers, and runtime pipeline.
 - `sdk/cliproxy/usage/`: usage event manager and plugin interface.
-- `keeper/`: release helper files for CPA Usage Keeper.
+- `manager/`: CPA-Manager-Plus binary and persistent data in release installations.
 - `test/`: cross-module integration tests.
 
 ## Code Conventions

@@ -66,10 +66,8 @@ archives:
       - stop.sh
       - restart.sh
       - update.sh
-      - src: keeper/.env.example
-        dst: keeper/.env.example
-      - src: .keeper-dist/{{ .Os }}/{{ .Arch }}/keeper
-        dst: keeper
+      - src: .manager-dist/{{ .Os }}/{{ .Arch }}/manager
+        dst: manager
 
 checksum:
   name_template: 'checksums.txt'

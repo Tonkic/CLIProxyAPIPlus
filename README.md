@@ -6,8 +6,8 @@ CLIProxyAPI Plus is a combined distribution built from:
 
 - `router-for-me/CLIProxyAPI`, the upstream proxy server.
 - `Tonkic/CLIProxyAPIPlus`, the Plus fork with extra providers and deployment packaging.
-- `Willxup/cpa-usage-keeper`, an external usage collector bundled in release archives.
-- Local integration code that exposes usage events through a Redis-compatible queue so the proxy and keeper can run together as one product.
+- `seakee/CPA-Manager-Plus`, an external management and usage dashboard bundled in release archives.
+- Local integration code that exposes usage events through a Redis-compatible queue so the proxy and manager can run together as one product.
 
 The goal is to keep the upstream CLIProxyAPI runtime compatible while adding Plus-specific providers, account management, usage collection, and easy deployment scripts.
 
@@ -20,7 +20,7 @@ The goal is to keep the upstream CLIProxyAPI runtime compatible while adding Plu
 - WebSocket support where supported by the upstream provider.
 - Request logging, management APIs, and a browser-based management panel.
 - Redis-compatible usage queue for external collectors.
-- Release packaging that can run CLIProxyAPI Plus and CPA Usage Keeper together.
+- Release packaging that can run CLIProxyAPI Plus and CPA-Manager-Plus together.
 
 ## Project Layout
 
@@ -33,7 +33,7 @@ internal/translator/         Protocol translators
 internal/redisqueue/         Redis-compatible usage queue plugin
 sdk/cliproxy/                Embeddable proxy service
 sdk/cliproxy/usage/          Usage event manager and plugin interface
-keeper/                      CPA Usage Keeper release helper files
+manager/                     CPA-Manager-Plus binary and persistent data
 docs/                        SDK and provider documentation
 ```
 
@@ -43,8 +43,7 @@ CLIProxyAPI Plus records usage events in the runtime and publishes them through 
 
 The API server accepts Redis RESP connections on the same listening port as the proxy. Consumers authenticate with the management key and read events with `LPOP` or `RPOP`.
 
-
-CPA Usage Keeper consumes that queue and provides persistent storage and visualization.
+CPA-Manager-Plus consumes that queue and provides persistent storage, service management, and visualization.
 
 Default release wiring:
 
@@ -52,7 +51,7 @@ Default release wiring:
 client -> CLIProxyAPI Plus :8317 -> Redis-compatible usage queue
                               |
                               v
-                         CPA Usage Keeper :8080
+                         CPA-Manager-Plus :18317
 ```
 
 Configure the proxy:
@@ -65,20 +64,7 @@ usage-statistics-enabled: true
 redis-usage-queue-retention-seconds: 60
 ```
 
-Configure the keeper by copying the sample environment:
-
-```bash
-cp keeper/.env.example keeper/.env
-```
-
-Important keeper settings:
-
-```env
-CPA_BASE_URL=http://127.0.0.1:8317
-CPA_MANAGEMENT_KEY=change-me
-REDIS_QUEUE_ADDR=127.0.0.1:8317
-APP_PORT=8080
-```
+After the first start, open `http://SERVER_IP:18317/management.html`. Use the generated CPA-Manager-Plus admin key, then add CLIProxyAPI Plus with URL `http://127.0.0.1:8317` and the configured management key. The manager defaults to `USAGE_COLLECTOR_MODE=auto`.
 
 ## Getting Started
 
@@ -106,9 +92,9 @@ Run the built binary:
 ./cli-proxy-api-plus --config ./config.yaml
 ```
 
-## Running With CPA Usage Keeper
+## Running With CPA-Manager-Plus
 
-Release archives include short Linux helper scripts and the keeper environment template:
+Release archives include short Linux helper scripts and the CPA-Manager-Plus binary:
 
 ```text
 CLIProxyAPIPlus_<version>_linux_<arch>/
@@ -118,16 +104,14 @@ CLIProxyAPIPlus_<version>_linux_<arch>/
 |-- stop.sh
 |-- restart.sh
 |-- update.sh
-`-- keeper/
-    |-- cpa-usage-keeper
-    `-- .env.example
+`-- manager/
+    `-- cpa-manager-plus
 ```
 
 Initial setup:
 
 ```bash
 cp config.example.yaml config.yaml
-cp keeper/.env.example keeper/.env
 ./start.sh
 ```
 
@@ -142,7 +126,18 @@ Service control:
 The helper starts:
 
 - CLIProxyAPI Plus at `http://127.0.0.1:8317`
-- CPA Usage Keeper at `http://127.0.0.1:8080`
+- CPA-Manager-Plus at `http://127.0.0.1:18317`
+
+On its first run, CPA-Manager-Plus prints a generated `cpamp_...` admin key. Read it from:
+
+```bash
+tail -n 200 logs/cpa-manager-plus.out.log
+tail -n 200 logs/cpa-manager-plus.err.log
+```
+
+The manager keeps persistent state in `manager/data/` and `manager/config.json`. Back up `manager/data/usage.sqlite*` and `manager/data/data.key`. Updates replace only the manager binary and preserve these files.
+
+When upgrading from a Keeper-based release, `restart.sh` stops the legacy `keeper` tmux session but leaves the entire `keeper/` directory untouched. Do not run Keeper and CPA-Manager-Plus at the same time because both consume the same in-memory usage queue. Their SQLite schemas are incompatible, so historical Keeper data must be exported and imported rather than copied over the manager database.
 
 ## Deployment Updates
 
@@ -150,7 +145,7 @@ For private Aliyun OSS mirrors, install and configure `ossutil`, then update wit
 
 ```bash
 ./update.sh \
-  --tag v7.1.19.1 \
+  --tag v7.2.80.1 \
   --bucket update-cpa-plus \
   --endpoint oss-cn-shenzhen.aliyuncs.com
 ```
@@ -159,7 +154,7 @@ To install only and restart manually:
 
 ```bash
 ./update.sh \
-  --tag v7.1.19.1 \
+  --tag v7.2.80.1 \
   --bucket update-cpa-plus \
   --endpoint oss-cn-shenzhen.aliyuncs.com \
   --no-restart
@@ -173,7 +168,7 @@ You can also provide OSS settings through environment variables:
 export ALIYUN_OSS_BUCKET=update-cpa-plus
 export ALIYUN_OSS_ENDPOINT=oss-cn-shenzhen.aliyuncs.com
 export ALIYUN_OSS_PREFIX=CLIProxyAPIPlus
-./update.sh --tag v7.1.19.1
+./update.sh --tag v7.2.80.1
 ```
 
 ## Amp CLI Support
@@ -205,13 +200,13 @@ go test ./...
 
 ## Release
 
-Releases use the upstream CLIProxyAPI version plus a Plus counter, for example `v7.0.6.1`. The release workflow builds Linux and Windows archives for amd64 and arm64 and includes the updater scripts plus CPA Usage Keeper helper files.
+Releases use the upstream CLIProxyAPI version plus a Plus counter, for example `v7.0.6.1`. The release workflow builds Linux and Windows archives for amd64 and arm64 and includes the updater scripts plus the matching CPA-Manager-Plus binary.
 
 ## Upstream Projects
 
 - CLIProxyAPI: `https://github.com/router-for-me/CLIProxyAPI`
 - CLIProxyAPI Plus: `https://github.com/Tonkic/CLIProxyAPIPlus`
-- CPA Usage Keeper: `https://github.com/Willxup/cpa-usage-keeper`
+- CPA-Manager-Plus: `https://github.com/seakee/CPA-Manager-Plus`
 
 ## License
 

@@ -20,7 +20,7 @@ Usage: update.sh --tag VERSION [options]
 Update CLIProxyAPI Plus from Aliyun OSS or local release files, then restart services.
 
 Options:
-  --tag VERSION          Release tag, for example v7.1.1.3.
+  --tag VERSION          Release tag, for example v7.2.80.1.
   --bucket NAME          OSS bucket. Can also be set with ALIYUN_OSS_BUCKET.
   --prefix PREFIX        OSS prefix. Defaults to CLIProxyAPIPlus.
   --endpoint ENDPOINT    OSS endpoint. Can also be set with ALIYUN_OSS_ENDPOINT.
@@ -33,7 +33,7 @@ Options:
   --help                 Show this help.
 
 Example:
-  ./update.sh --tag v7.1.1.3 --bucket update-cpa-plus --endpoint oss-cn-shenzhen.aliyuncs.com
+  ./update.sh --tag v7.2.80.1 --bucket update-cpa-plus --endpoint oss-cn-shenzhen.aliyuncs.com
 EOF
 }
 
@@ -134,11 +134,12 @@ for file in start.sh stop.sh restart.sh update.sh README.md README_CN.md README_
   [ -f "$STAGING_DIR/$file" ] && run cp "$STAGING_DIR/$file" "$ROOT/$file"
 done
 
-if [ -f "$STAGING_DIR/keeper/cpa-usage-keeper" ]; then
-  run mkdir -p "$ROOT/keeper"
-  install_executable "$STAGING_DIR/keeper/cpa-usage-keeper" "$ROOT/keeper/cpa-usage-keeper"
+NEW_MANAGER_BIN=$(find "$STAGING_DIR" -type f -path '*/manager/cpa-manager-plus' 2>/dev/null | head -n 1 || true)
+if [ -n "$NEW_MANAGER_BIN" ]; then
+  run mkdir -p "$ROOT/manager" "$BACKUP_DIR/manager"
+  [ -f "$ROOT/manager/cpa-manager-plus" ] && run cp "$ROOT/manager/cpa-manager-plus" "$BACKUP_DIR/manager/cpa-manager-plus"
+  install_executable "$NEW_MANAGER_BIN" "$ROOT/manager/cpa-manager-plus"
 fi
-[ -f "$STAGING_DIR/keeper/.env.example" ] && run cp "$STAGING_DIR/keeper/.env.example" "$ROOT/keeper/.env.example"
 
 if [ "$NO_RESTART" -eq 0 ]; then
   run sh "$ROOT/restart.sh" --root "$ROOT"

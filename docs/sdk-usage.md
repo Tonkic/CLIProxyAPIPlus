@@ -65,7 +65,7 @@ Management endpoints are mounted only when `remote-management.secret-key` is set
 
 ## Usage Publishing
 
-Runtime usage records are published through `sdk/cliproxy/usage`. The built-in `internal/redisqueue` plugin consumes those records and exposes them through the Redis-compatible queue used by CPA Usage Keeper.
+Runtime usage records are published through `sdk/cliproxy/usage`. The built-in `internal/redisqueue` plugin consumes those records and exposes them through the Redis-compatible queue used by CPA-Manager-Plus.
 
 ## Custom Client Sources
 
