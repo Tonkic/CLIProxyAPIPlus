@@ -2,6 +2,7 @@
 set -eu
 
 TAG=${UPDATE_TAG:-}
+REPOSITORY=${UPDATE_REPOSITORY:-Tonkic/CLIProxyAPIPlus}
 BUCKET=${ALIYUN_OSS_BUCKET:-}
 PREFIX=${ALIYUN_OSS_PREFIX:-CLIProxyAPIPlus}
 ENDPOINT=${ALIYUN_OSS_ENDPOINT:-}
@@ -17,14 +18,15 @@ usage() {
   cat <<'EOF'
 Usage: update.sh --tag VERSION [options]
 
-Update CLIProxyAPI Plus from Aliyun OSS or local release files, then restart services.
+Update CLIProxyAPI Plus from GitHub Releases, Aliyun OSS, or local release files, then restart services.
 
 Options:
   --tag VERSION          Release tag, for example v7.2.80.2.
+  --repository OWNER/REPO GitHub repository. Defaults to Tonkic/CLIProxyAPIPlus.
   --bucket NAME          OSS bucket. Can also be set with ALIYUN_OSS_BUCKET.
   --prefix PREFIX        OSS prefix. Defaults to CLIProxyAPIPlus.
   --endpoint ENDPOINT    OSS endpoint. Can also be set with ALIYUN_OSS_ENDPOINT.
-  --archive PATH         Local release archive instead of OSS download.
+  --archive PATH         Local release archive instead of downloading.
   --checksums PATH       Local checksums.txt.
   --download-dir PATH    Download directory. Defaults to ROOT/.update/downloads/TAG.
   --root PATH            Install directory. Defaults to this script's directory.
@@ -33,7 +35,8 @@ Options:
   --help                 Show this help.
 
 Example:
-  ./update.sh --tag v7.2.80.2 --bucket update-cpa-plus --endpoint oss-cn-shenzhen.aliyuncs.com
+  ./update.sh --tag v7.2.91.1
+  ./update.sh --tag v7.2.91.1 --bucket update-cpa-plus --endpoint oss-cn-shenzhen.aliyuncs.com
 EOF
 }
 
@@ -66,6 +69,7 @@ install_executable() {
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --tag) [ "$#" -ge 2 ] || fail "$1 requires a value"; TAG=$2; shift 2 ;;
+    --repository|--repo) [ "$#" -ge 2 ] || fail "$1 requires a value"; REPOSITORY=$2; shift 2 ;;
     --bucket) [ "$#" -ge 2 ] || fail "$1 requires a value"; BUCKET=$2; shift 2 ;;
     --prefix) [ "$#" -ge 2 ] || fail "$1 requires a value"; PREFIX=$2; shift 2 ;;
     --endpoint) [ "$#" -ge 2 ] || fail "$1 requires a value"; ENDPOINT=$2; shift 2 ;;
@@ -99,20 +103,26 @@ need_cmd uname
 run mkdir -p "$DOWNLOAD_DIR" "$ROOT/.update/staging" "$ROOT/.update/backups"
 
 if [ ! -f "$ARCHIVE" ] || [ ! -f "$CHECKSUMS" ]; then
-  [ -n "$BUCKET" ] || fail "--bucket or ALIYUN_OSS_BUCKET is required when archive/checksums are not local"
-  need_cmd "$OSSUTIL"
-  PREFIX=$(trim_slashes "$PREFIX")
-  if [ -n "$PREFIX" ]; then
-    OSS_BASE="oss://${BUCKET}/${PREFIX}/${TAG}"
+  if [ -n "$BUCKET" ]; then
+    need_cmd "$OSSUTIL"
+    PREFIX=$(trim_slashes "$PREFIX")
+    if [ -n "$PREFIX" ]; then
+      OSS_BASE="oss://${BUCKET}/${PREFIX}/${TAG}"
+    else
+      OSS_BASE="oss://${BUCKET}/${TAG}"
+    fi
+    if [ -n "$ENDPOINT" ]; then
+      run "$OSSUTIL" cp "${OSS_BASE}/${ASSET}" "$ARCHIVE" -f -e "$ENDPOINT"
+      run "$OSSUTIL" cp "${OSS_BASE}/checksums.txt" "$CHECKSUMS" -f -e "$ENDPOINT"
+    else
+      run "$OSSUTIL" cp "${OSS_BASE}/${ASSET}" "$ARCHIVE" -f
+      run "$OSSUTIL" cp "${OSS_BASE}/checksums.txt" "$CHECKSUMS" -f
+    fi
   else
-    OSS_BASE="oss://${BUCKET}/${TAG}"
-  fi
-  if [ -n "$ENDPOINT" ]; then
-    run "$OSSUTIL" cp "${OSS_BASE}/${ASSET}" "$ARCHIVE" -f -e "$ENDPOINT"
-    run "$OSSUTIL" cp "${OSS_BASE}/checksums.txt" "$CHECKSUMS" -f -e "$ENDPOINT"
-  else
-    run "$OSSUTIL" cp "${OSS_BASE}/${ASSET}" "$ARCHIVE" -f
-    run "$OSSUTIL" cp "${OSS_BASE}/checksums.txt" "$CHECKSUMS" -f
+    need_cmd curl
+    RELEASE_BASE="https://github.com/${REPOSITORY}/releases/download/${TAG}"
+    run curl -fL --retry 5 --retry-delay 2 --retry-connrefused "${RELEASE_BASE}/${ASSET}" -o "$ARCHIVE"
+    run curl -fL --retry 5 --retry-delay 2 --retry-connrefused "${RELEASE_BASE}/checksums.txt" -o "$CHECKSUMS"
   fi
 fi
 

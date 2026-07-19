@@ -137,7 +137,7 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-          MANAGER_VERSION: v1.11.2
+          MANAGER_VERSION: v1.11.3
         run: |
           set -euo pipefail
           base_url="https://github.com/seakee/CPA-Manager-Plus/releases/download/${MANAGER_VERSION}"

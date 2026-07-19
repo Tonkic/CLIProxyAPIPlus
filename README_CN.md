@@ -134,47 +134,41 @@ manager 的持久化文件位于 `manager/data/` 和 `manager/config.json`。建
 
 从旧 Keeper 版本升级时，`restart.sh` 会停止旧的 `keeper` tmux 会话，但完整保留 `keeper/` 目录。不要同时运行 Keeper 和 CPA-Manager-Plus，因为二者会消费同一个内存用量队列。两者的 SQLite 结构不兼容，历史 Keeper 数据需要先导出再导入，不能直接复制数据库文件。
 
-Keeper 版本使用的是旧 updater。首次迁移前，先从 OSS 换成独立发布的新 updater：
+Keeper 版本使用的是旧 updater。首次迁移前，先从 GitHub Release 换成独立发布的新 updater：
 
 ```bash
-ossutil cp \
-  oss://update-cpa-plus/CLIProxyAPIPlus/v7.2.80.2/update.sh \
-  ./update.sh.new \
-  -f -e oss-cn-shenzhen.aliyuncs.com
+curl -fL \
+  https://github.com/Tonkic/CLIProxyAPIPlus/releases/download/v7.2.91.1/update.sh \
+  -o ./update.sh.new
 chmod +x ./update.sh.new
 mv -f ./update.sh.new ./update.sh
 ```
 
 ## 更新部署
 
-私有阿里云 OSS 镜像更新：先在服务器安装并配置 `ossutil`，然后执行：
+默认直接从 GitHub Release 下载：
 
 ```bash
-./update.sh \
-  --tag v7.2.80.2 \
-  --bucket update-cpa-plus \
-  --endpoint oss-cn-shenzhen.aliyuncs.com
+./update.sh --tag v7.2.91.1
 ```
 
 只更新不重启，然后手动重启：
 
 ```bash
 ./update.sh \
-  --tag v7.2.80.2 \
-  --bucket update-cpa-plus \
-  --endpoint oss-cn-shenzhen.aliyuncs.com \
+  --tag v7.2.91.1 \
   --no-restart
 
 ./restart.sh
 ```
 
-也可以用环境变量保存 OSS 配置：
+阿里云 OSS 仍可作为可选镜像，显式传入 `--bucket` 和 `--endpoint` 即可：
 
 ```bash
-export ALIYUN_OSS_BUCKET=update-cpa-plus
-export ALIYUN_OSS_ENDPOINT=oss-cn-shenzhen.aliyuncs.com
-export ALIYUN_OSS_PREFIX=CLIProxyAPIPlus
-./update.sh --tag v7.2.80.2
+./update.sh \
+  --tag v7.2.91.1 \
+  --bucket update-cpa-plus \
+  --endpoint oss-cn-shenzhen.aliyuncs.com
 ```
 
 ## Amp CLI 支持
