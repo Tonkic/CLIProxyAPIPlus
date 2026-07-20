@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"reflect"
 	"sync"
 	"testing"
 	"time"
@@ -238,6 +239,98 @@ type resultCaptureHook struct {
 
 	mu      sync.Mutex
 	results []Result
+}
+
+func TestManagerAPIKeyAuthPolicyFallsBackOnlyWithinAllowedPool(t *testing.T) {
+	m := NewManager(nil, nil, nil)
+	executor := &authFallbackExecutor{
+		id: "test",
+		executeErrors: map[string]error{
+			"team-a": &Error{HTTPStatus: http.StatusUnauthorized, Message: "team-a unavailable"},
+		},
+		streamFirstErrors: map[string]error{
+			"team-a": &Error{HTTPStatus: http.StatusUnauthorized, Message: "team-a unavailable"},
+		},
+	}
+	m.RegisterExecutor(executor)
+	for _, authID := range []string{"public", "team-a", "team-b"} {
+		if _, err := m.Register(context.Background(), &Auth{ID: authID, Provider: "test"}); err != nil {
+			t.Fatalf("register %s: %v", authID, err)
+		}
+	}
+	opts := cliproxyexecutor.Options{Metadata: map[string]any{
+		cliproxyexecutor.AllowedAuthIDsMetadataKey: []string{"team-a", "team-b"},
+	}}
+
+	resp, err := m.Execute(context.Background(), []string{"test"}, cliproxyexecutor.Request{}, opts)
+	if err != nil {
+		t.Fatalf("Execute error = %v", err)
+	}
+	if got := string(resp.Payload); got != "team-b" {
+		t.Fatalf("Execute payload = %q, want team-b", got)
+	}
+	if got := executor.ExecuteCalls(); !reflect.DeepEqual(got, []string{"team-a", "team-b"}) {
+		t.Fatalf("Execute calls = %v", got)
+	}
+
+	streamManager := NewManager(nil, nil, nil)
+	streamExecutor := &authFallbackExecutor{
+		id: "test",
+		streamFirstErrors: map[string]error{
+			"team-a": &Error{HTTPStatus: http.StatusUnauthorized, Message: "team-a unavailable"},
+		},
+	}
+	streamManager.RegisterExecutor(streamExecutor)
+	for _, authID := range []string{"public", "team-a", "team-b"} {
+		if _, err := streamManager.Register(context.Background(), &Auth{ID: authID, Provider: "test"}); err != nil {
+			t.Fatalf("register stream %s: %v", authID, err)
+		}
+	}
+
+	streamResult, err := streamManager.ExecuteStream(context.Background(), []string{"test"}, cliproxyexecutor.Request{}, opts)
+	if err != nil {
+		t.Fatalf("ExecuteStream error = %v", err)
+	}
+	for chunk := range streamResult.Chunks {
+		if chunk.Err != nil {
+			t.Fatalf("stream chunk error = %v", chunk.Err)
+		}
+		if got := string(chunk.Payload); got != "team-b" {
+			t.Fatalf("stream payload = %q, want team-b", got)
+		}
+	}
+	if got := streamExecutor.StreamCalls(); !reflect.DeepEqual(got, []string{"team-a", "team-b"}) {
+		t.Fatalf("stream calls = %v", got)
+	}
+}
+
+func TestManagerAPIKeyAuthPolicyNeverFallsBackToPublicAuth(t *testing.T) {
+	m := NewManager(nil, nil, nil)
+	executor := &authFallbackExecutor{
+		id: "test",
+		executeErrors: map[string]error{
+			"team-a": &Error{HTTPStatus: http.StatusUnauthorized, Message: "team-a unavailable"},
+			"team-b": &Error{HTTPStatus: http.StatusUnauthorized, Message: "team-b unavailable"},
+		},
+	}
+	m.RegisterExecutor(executor)
+	for _, authID := range []string{"public", "team-a", "team-b"} {
+		if _, err := m.Register(context.Background(), &Auth{ID: authID, Provider: "test"}); err != nil {
+			t.Fatalf("register %s: %v", authID, err)
+		}
+	}
+	opts := cliproxyexecutor.Options{Metadata: map[string]any{
+		cliproxyexecutor.AllowedAuthIDsMetadataKey: []string{"team-a", "team-b"},
+	}}
+
+	if _, err := m.Execute(context.Background(), []string{"test"}, cliproxyexecutor.Request{}, opts); err == nil {
+		t.Fatal("Execute error is nil, want bound pool unavailable")
+	}
+	for _, authID := range executor.ExecuteCalls() {
+		if authID == "public" {
+			t.Fatalf("public auth was called: %v", executor.ExecuteCalls())
+		}
+	}
 }
 
 func (h *resultCaptureHook) OnResult(_ context.Context, result Result) {

@@ -4,6 +4,12 @@
 // debug settings, proxy configuration, and API keys.
 package config
 
+// APIKeyAuthBinding restricts one or more client API keys to a dedicated auth pool.
+type APIKeyAuthBinding struct {
+	APIKeys []string `yaml:"api-keys" json:"-"`
+	AuthIDs []string `yaml:"auth-ids" json:"auth-ids"`
+}
+
 // SDKConfig represents the application's configuration, loaded from a YAML file.
 type SDKConfig struct {
 	// ProxyURL is the URL of an optional proxy server to use for outbound requests.
@@ -44,6 +50,10 @@ type SDKConfig struct {
 
 	// APIKeys is a list of keys for authenticating clients to this proxy server.
 	APIKeys []string `yaml:"api-keys" json:"api-keys"`
+
+	// APIKeyAuthBindings restricts matched client API keys to the listed auth IDs and
+	// prevents ordinary API keys from using any auth ID protected by a binding.
+	APIKeyAuthBindings []APIKeyAuthBinding `yaml:"api-key-auth-bindings,omitempty" json:"api-key-auth-bindings,omitempty"`
 
 	// PassthroughHeaders controls whether upstream response headers are forwarded to downstream clients.
 	// Default is false (disabled).

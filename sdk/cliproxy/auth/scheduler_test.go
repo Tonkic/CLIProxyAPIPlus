@@ -105,6 +105,52 @@ func newSchedulerForTest(selector Selector, auths ...*Auth) *authScheduler {
 	return scheduler
 }
 
+func TestSchedulerPickAppliesClientAuthPolicy(t *testing.T) {
+	scheduler := newSchedulerForTest(
+		&RoundRobinSelector{},
+		&Auth{ID: "public", Provider: "test"},
+		&Auth{ID: "team-a", Provider: "test"},
+		&Auth{ID: "team-b", Provider: "test"},
+	)
+
+	t.Run("allowed auth IDs are a hard allowlist", func(t *testing.T) {
+		opts := cliproxyexecutor.Options{Metadata: map[string]any{
+			cliproxyexecutor.AllowedAuthIDsMetadataKey: []string{"team-a", "team-b"},
+		}}
+		for range 4 {
+			got, err := scheduler.pickSingle(context.Background(), "test", "", opts, nil)
+			if err != nil {
+				t.Fatalf("pickSingle() error = %v", err)
+			}
+			if got.ID != "team-a" && got.ID != "team-b" {
+				t.Fatalf("picked auth = %q, want bound team auth", got.ID)
+			}
+		}
+	})
+
+	t.Run("excluded auth IDs protect bound credentials", func(t *testing.T) {
+		opts := cliproxyexecutor.Options{Metadata: map[string]any{
+			cliproxyexecutor.ExcludedAuthIDsMetadataKey: []string{"team-a", "team-b"},
+		}}
+		got, err := scheduler.pickSingle(context.Background(), "test", "", opts, nil)
+		if err != nil {
+			t.Fatalf("pickSingle() error = %v", err)
+		}
+		if got.ID != "public" {
+			t.Fatalf("picked auth = %q, want public", got.ID)
+		}
+	})
+
+	t.Run("present empty allowlist denies every auth", func(t *testing.T) {
+		opts := cliproxyexecutor.Options{Metadata: map[string]any{
+			cliproxyexecutor.AllowedAuthIDsMetadataKey: []string{},
+		}}
+		if got, err := scheduler.pickSingle(context.Background(), "test", "", opts, nil); err == nil || got != nil {
+			t.Fatalf("pickSingle() = %#v, %v; want auth_not_found", got, err)
+		}
+	})
+}
+
 func registerSchedulerModels(t *testing.T, provider string, model string, authIDs ...string) {
 	t.Helper()
 	reg := registry.GetGlobalRegistry()

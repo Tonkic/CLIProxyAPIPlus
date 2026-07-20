@@ -3151,6 +3151,57 @@ func disallowFreeAuthFromMetadata(meta map[string]any) bool {
 	}
 }
 
+func authAllowedByClientPolicy(authID string, meta map[string]any) bool {
+	authID = strings.TrimSpace(authID)
+	if authID == "" {
+		return false
+	}
+	if allowed, present := stringSetMetadata(meta, cliproxyexecutor.AllowedAuthIDsMetadataKey); present {
+		_, ok := allowed[authID]
+		return ok
+	}
+	excluded, _ := stringSetMetadata(meta, cliproxyexecutor.ExcludedAuthIDsMetadataKey)
+	_, blocked := excluded[authID]
+	return !blocked
+}
+
+// AuthAllowedByClientPolicy reports whether authID satisfies the request-scoped
+// allow/exclude policy carried in execution metadata.
+func (m *Manager) AuthAllowedByClientPolicy(authID string, meta map[string]any) bool {
+	return authAllowedByClientPolicy(authID, meta)
+}
+
+func stringSetMetadata(meta map[string]any, key string) (map[string]struct{}, bool) {
+	if meta == nil {
+		return nil, false
+	}
+	raw, present := meta[key]
+	if !present {
+		return nil, false
+	}
+	out := make(map[string]struct{})
+	add := func(value string) {
+		if value = strings.TrimSpace(value); value != "" {
+			out[value] = struct{}{}
+		}
+	}
+	switch values := raw.(type) {
+	case []string:
+		for _, value := range values {
+			add(value)
+		}
+	case []any:
+		for _, value := range values {
+			add(fmt.Sprint(value))
+		}
+	case string:
+		add(values)
+	case []byte:
+		add(string(values))
+	}
+	return out, true
+}
+
 func isFreeCodexAuth(auth *Auth) bool {
 	if auth == nil || auth.Attributes == nil {
 		return false
@@ -4847,6 +4898,9 @@ func (m *Manager) pickNextLegacy(ctx context.Context, provider, model string, op
 		if pinnedAuthID != "" && candidate.ID != pinnedAuthID {
 			continue
 		}
+		if !authAllowedByClientPolicy(candidate.ID, opts.Metadata) {
+			continue
+		}
 		if disallowFreeAuth && isFreeCodexAuth(candidate) {
 			continue
 		}
@@ -4960,6 +5014,9 @@ func (m *Manager) pickNext(ctx context.Context, provider, model string, opts cli
 			if candidate == nil || executorKeyFromAuth(candidate) != provider || candidate.Disabled {
 				continue
 			}
+			if !authAllowedByClientPolicy(candidate.ID, opts.Metadata) {
+				continue
+			}
 			if _, used := tried[candidate.ID]; used {
 				continue
 			}
@@ -5045,6 +5102,9 @@ func (m *Manager) pickNextMixedLegacy(ctx context.Context, providers []string, m
 			continue
 		}
 		if pinnedAuthID != "" && candidate.ID != pinnedAuthID {
+			continue
+		}
+		if !authAllowedByClientPolicy(candidate.ID, opts.Metadata) {
 			continue
 		}
 		if disallowFreeAuth && isFreeCodexAuth(candidate) {
@@ -5146,6 +5206,9 @@ func (m *Manager) pickNextMixed(ctx context.Context, providers []string, model s
 		m.mu.RLock()
 		for _, candidate := range m.auths {
 			if candidate == nil || candidate.Disabled {
+				continue
+			}
+			if !authAllowedByClientPolicy(candidate.ID, opts.Metadata) {
 				continue
 			}
 			if _, ok := providerSet[executorKeyFromAuth(candidate)]; !ok {
@@ -5462,7 +5525,7 @@ func (m *Manager) pickNextViaHome(ctx context.Context, model string, opts clipro
 		if pinnedAuthID := pinnedAuthIDFromMetadata(opts.Metadata); pinnedAuthID != "" {
 			_, alreadyTried := tried[pinnedAuthID]
 			if !alreadyTried {
-				if auth, executor, providerKey, ok := m.homeRuntimeAuthByID(executionSessionID, pinnedAuthID); ok {
+				if auth, executor, providerKey, ok := m.homeRuntimeAuthByID(executionSessionID, pinnedAuthID); ok && authAllowedByClientPolicy(auth.ID, opts.Metadata) {
 					return auth, executor, providerKey, nil
 				}
 			}
@@ -5534,6 +5597,9 @@ func (m *Manager) pickNextViaHome(ctx context.Context, model string, opts clipro
 	if strings.TrimSpace(auth.ID) == "" {
 		return nil, nil, "", &Error{Code: "invalid_auth", Message: "home returned auth without id", HTTPStatus: http.StatusBadGateway}
 	}
+	if !authAllowedByClientPolicy(auth.ID, opts.Metadata) {
+		return nil, nil, "", &Error{Code: "auth_not_found", Message: "no auth available", HTTPStatus: http.StatusServiceUnavailable}
+	}
 	if homeAuthAlreadyTried(tried, auth.ID) {
 		return nil, nil, "", repeatedHomeAuthError()
 	}
@@ -5602,6 +5668,9 @@ func (m *Manager) findAllAntigravityCreditsCandidateAuths(ctx context.Context, r
 			continue
 		}
 		if pinnedAuthID != "" && auth.ID != pinnedAuthID {
+			continue
+		}
+		if !authAllowedByClientPolicy(auth.ID, opts.Metadata) {
 			continue
 		}
 		if !strings.EqualFold(strings.TrimSpace(auth.Provider), "antigravity") {

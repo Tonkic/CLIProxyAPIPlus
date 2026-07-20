@@ -41,6 +41,16 @@ api-keys:
   - 'your-api-key-2'
   - 'your-api-key-3'
 
+# Optional API key to credential-pool bindings.
+# A matched client key can only use the listed auth IDs. Other client keys
+# cannot use auth IDs protected by any binding.
+# api-key-auth-bindings:
+#   - api-keys:
+#       - 'your-team-api-key'
+#     auth-ids:
+#       - 'codex-team-account-a.json'
+#       - 'codex-team-account-b.json'
+
 # Enable debug logging
 debug: false
 

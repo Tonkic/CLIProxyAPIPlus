@@ -3,9 +3,11 @@ package handlers
 import (
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"testing"
 
 	"github.com/gin-gonic/gin"
+	"github.com/router-for-me/CLIProxyAPI/v7/internal/config"
 	"github.com/router-for-me/CLIProxyAPI/v7/internal/logging"
 	coreexecutor "github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy/executor"
 	"golang.org/x/net/context"
@@ -14,7 +16,7 @@ import (
 func TestRequestExecutionMetadataIncludesExecutionSessionWithoutIdempotencyKey(t *testing.T) {
 	ctx := WithExecutionSessionID(context.Background(), "session-1")
 
-	meta := requestExecutionMetadata(ctx)
+	meta := requestExecutionMetadata(ctx, nil)
 	if got := meta[coreexecutor.ExecutionSessionMetadataKey]; got != "session-1" {
 		t.Fatalf("ExecutionSessionMetadataKey = %v, want %q", got, "session-1")
 	}
@@ -34,7 +36,7 @@ func TestRequestExecutionMetadataTraceCallbackWebsocketDetection(t *testing.T) {
 		logging.SetGinRequestID(ginCtx, "1234abcd")
 		ctx := context.WithValue(context.Background(), "gin", ginCtx)
 
-		meta := requestExecutionMetadata(ctx)
+		meta := requestExecutionMetadata(ctx, nil)
 
 		if _, exists := meta[coreexecutor.SelectedAuthIndexCallbackMetadataKey]; exists {
 			t.Fatal("unexpected selected auth index callback for websocket upgrade")
@@ -48,12 +50,74 @@ func TestRequestExecutionMetadataTraceCallbackWebsocketDetection(t *testing.T) {
 		logging.SetGinRequestID(ginCtx, "1234abcd")
 		ctx := context.WithValue(context.Background(), "gin", ginCtx)
 
-		meta := requestExecutionMetadata(ctx)
+		meta := requestExecutionMetadata(ctx, nil)
 
 		if _, exists := meta[coreexecutor.SelectedAuthIndexCallbackMetadataKey]; !exists {
 			t.Fatal("missing selected auth index callback for ordinary HTTP request")
 		}
 	})
+}
+
+func TestRequestExecutionMetadataRestrictsBoundAPIKeyToConfiguredAuths(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ginCtx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ginCtx.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+	ginCtx.Set("userApiKey", "sk-team-exclusive")
+	ctx := context.WithValue(context.Background(), "gin", ginCtx)
+	cfg := &config.SDKConfig{APIKeyAuthBindings: []config.APIKeyAuthBinding{
+		{APIKeys: []string{"sk-team-exclusive"}, AuthIDs: []string{"team-b", "team-a"}},
+		{APIKeys: []string{"sk-team-exclusive"}, AuthIDs: []string{"team-a", "team-c"}},
+	}}
+
+	meta := requestExecutionMetadata(ctx, cfg)
+
+	if got := meta[coreexecutor.AllowedAuthIDsMetadataKey]; !reflect.DeepEqual(got, []string{"team-a", "team-b", "team-c"}) {
+		t.Fatalf("allowed auth IDs = %#v", got)
+	}
+	if _, exists := meta[coreexecutor.ExcludedAuthIDsMetadataKey]; exists {
+		t.Fatalf("bound API key unexpectedly received excluded auth IDs: %#v", meta)
+	}
+}
+
+func TestRequestExecutionMetadataExcludesProtectedAuthsForOrdinaryAPIKey(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ginCtx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ginCtx.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+	ginCtx.Request.Header.Set("X-Pinned-Auth-ID", "team-a")
+	ginCtx.Request.Header.Set("X-Allowed-Auth-IDs", "team-a")
+	ginCtx.Set("userApiKey", "sk-public-normal")
+	ctx := context.WithValue(context.Background(), "gin", ginCtx)
+	cfg := &config.SDKConfig{APIKeyAuthBindings: []config.APIKeyAuthBinding{
+		{APIKeys: []string{"sk-team-exclusive"}, AuthIDs: []string{"team-b", "team-a"}},
+	}}
+
+	meta := requestExecutionMetadata(ctx, cfg)
+
+	if got := meta[coreexecutor.ExcludedAuthIDsMetadataKey]; !reflect.DeepEqual(got, []string{"team-a", "team-b"}) {
+		t.Fatalf("excluded auth IDs = %#v", got)
+	}
+	if _, exists := meta[coreexecutor.AllowedAuthIDsMetadataKey]; exists {
+		t.Fatalf("ordinary API key unexpectedly received allowed auth IDs: %#v", meta)
+	}
+	if _, exists := meta[coreexecutor.PinnedAuthMetadataKey]; exists {
+		t.Fatalf("client header injected pinned auth metadata: %#v", meta)
+	}
+}
+
+func TestRequestExecutionMetadataEmptyBoundAuthListDeniesAll(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ginCtx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ginCtx.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
+	ginCtx.Set("userApiKey", "sk-empty")
+	ctx := context.WithValue(context.Background(), "gin", ginCtx)
+	cfg := &config.SDKConfig{APIKeyAuthBindings: []config.APIKeyAuthBinding{{APIKeys: []string{"sk-empty"}}}}
+
+	meta := requestExecutionMetadata(ctx, cfg)
+
+	got, exists := meta[coreexecutor.AllowedAuthIDsMetadataKey]
+	if !exists || !reflect.DeepEqual(got, []string{}) {
+		t.Fatalf("empty binding metadata = %#v, exists=%v", got, exists)
+	}
 }
 
 func TestSetReasoningEffortMetadataUsesSuffixOverBody(t *testing.T) {

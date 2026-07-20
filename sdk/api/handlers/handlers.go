@@ -5,12 +5,15 @@ package handlers
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
 	"reflect"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -256,7 +259,7 @@ func PassthroughHeadersEnabled(cfg *config.SDKConfig) bool {
 	return cfg != nil && cfg.PassthroughHeaders
 }
 
-func requestExecutionMetadata(ctx context.Context) map[string]any {
+func requestExecutionMetadata(ctx context.Context, cfg *config.SDKConfig) map[string]any {
 	// Idempotency-Key is an optional client-supplied header used to correlate retries.
 	// Only include it if the client explicitly provides it.
 	key := ""
@@ -297,7 +300,63 @@ func requestExecutionMetadata(ctx context.Context) map[string]any {
 	if disallowFreeAuthFromContext(ctx) {
 		meta[coreexecutor.DisallowFreeAuthMetadataKey] = true
 	}
+	applyAPIKeyAuthBinding(ginCtx, cfg, meta)
 	return meta
+}
+
+func applyAPIKeyAuthBinding(ginCtx *gin.Context, cfg *config.SDKConfig, meta map[string]any) {
+	if ginCtx == nil || cfg == nil || len(cfg.APIKeyAuthBindings) == 0 || meta == nil {
+		return
+	}
+	raw, exists := ginCtx.Get("userApiKey")
+	if !exists {
+		return
+	}
+	clientKey := strings.TrimSpace(fmt.Sprint(raw))
+	if clientKey == "" {
+		return
+	}
+	clientDigest := sha256.Sum256([]byte(clientKey))
+	protected := make(map[string]struct{})
+	allowed := make(map[string]struct{})
+	matched := false
+	for _, binding := range cfg.APIKeyAuthBindings {
+		bindingMatched := false
+		for _, key := range binding.APIKeys {
+			keyDigest := sha256.Sum256([]byte(strings.TrimSpace(key)))
+			if subtle.ConstantTimeCompare(clientDigest[:], keyDigest[:]) == 1 {
+				bindingMatched = true
+				matched = true
+				break
+			}
+		}
+		for _, authID := range binding.AuthIDs {
+			authID = strings.TrimSpace(authID)
+			if authID == "" {
+				continue
+			}
+			protected[authID] = struct{}{}
+			if bindingMatched {
+				allowed[authID] = struct{}{}
+			}
+		}
+	}
+	if matched {
+		meta[coreexecutor.AllowedAuthIDsMetadataKey] = sortedStringSet(allowed)
+		return
+	}
+	if len(protected) > 0 {
+		meta[coreexecutor.ExcludedAuthIDsMetadataKey] = sortedStringSet(protected)
+	}
+}
+
+func sortedStringSet(values map[string]struct{}) []string {
+	out := make([]string, 0, len(values))
+	for value := range values {
+		out = append(out, value)
+	}
+	sort.Strings(out)
+	return out
 }
 
 func addAuthSelectionModelMetadata(meta map[string]any, model string) {
@@ -468,6 +527,16 @@ func NewBaseAPIHandlers(cfg *config.SDKConfig, authManager *coreauth.Manager) *B
 //   - clients: The new slice of AI service clients
 //   - cfg: The new application configuration
 func (h *BaseAPIHandler) UpdateClients(cfg *config.SDKConfig) { h.Cfg = cfg }
+
+// AuthAllowedForRequest revalidates an auth ID against the authenticated
+// client's current binding policy. It is used by session-level auth reuse paths
+// that do not perform a fresh scheduler pick.
+func (h *BaseAPIHandler) AuthAllowedForRequest(ctx context.Context, authID string) bool {
+	if h == nil || h.AuthManager == nil {
+		return false
+	}
+	return h.AuthManager.AuthAllowedByClientPolicy(authID, requestExecutionMetadata(ctx, h.Cfg))
+}
 
 // SetPluginHost configures the optional plugin interceptor host.
 func (h *BaseAPIHandler) SetPluginHost(host PluginInterceptorHost) {
@@ -755,7 +824,7 @@ func (h *BaseAPIHandler) executeWithAuthManagerFormats(ctx context.Context, entr
 		return nil, nil, errMsg
 	}
 	providers = adjustExecutionProvidersForEntryProtocol(entryProtocol, providers)
-	reqMeta := requestExecutionMetadata(ctx)
+	reqMeta := requestExecutionMetadata(ctx, h.Cfg)
 	reqMeta[coreexecutor.RequestedModelMetadataKey] = originalRequestedModel
 	addAuthSelectionModelMetadata(reqMeta, execOptions.AuthSelectionModel)
 	addModelExecutionSourceMetadata(reqMeta, execOptions.InternalSource)
@@ -824,7 +893,7 @@ func (h *BaseAPIHandler) executeCountWithAuthManager(ctx context.Context, handle
 		return nil, nil, errMsg
 	}
 	providers = adjustExecutionProvidersForEntryProtocol(handlerType, providers)
-	reqMeta := requestExecutionMetadata(ctx)
+	reqMeta := requestExecutionMetadata(ctx, h.Cfg)
 	reqMeta[coreexecutor.RequestedModelMetadataKey] = originalRequestedModel
 	addAuthSelectionModelMetadata(reqMeta, execOptions.AuthSelectionModel)
 	setReasoningEffortMetadata(reqMeta, handlerType, normalizedModel, rawJSON)
@@ -911,7 +980,7 @@ func (h *BaseAPIHandler) countWithPluginExecutor(ctx context.Context, handlerTyp
 }
 
 func (h *BaseAPIHandler) pluginExecutorRequest(ctx context.Context, entryProtocol, responseProtocol, modelName, originalRequestedModel string, rawJSON []byte, alt string, stream bool, execOptions modelExecutionOptions) (coreexecutor.Request, coreexecutor.Options) {
-	reqMeta := requestExecutionMetadata(ctx)
+	reqMeta := requestExecutionMetadata(ctx, h.Cfg)
 	reqMeta[coreexecutor.RequestedModelMetadataKey] = originalRequestedModel
 	addAuthSelectionModelMetadata(reqMeta, execOptions.AuthSelectionModel)
 	addModelExecutionSourceMetadata(reqMeta, execOptions.InternalSource)
@@ -1159,7 +1228,7 @@ func (h *BaseAPIHandler) executeStreamWithAuthManagerFormats(ctx context.Context
 		return nil, nil, errChan
 	}
 	providers = adjustExecutionProvidersForEntryProtocol(entryProtocol, providers)
-	reqMeta := requestExecutionMetadata(ctx)
+	reqMeta := requestExecutionMetadata(ctx, h.Cfg)
 	reqMeta[coreexecutor.RequestedModelMetadataKey] = originalRequestedModel
 	addAuthSelectionModelMetadata(reqMeta, execOptions.AuthSelectionModel)
 	addModelExecutionSourceMetadata(reqMeta, execOptions.InternalSource)
@@ -1921,7 +1990,7 @@ func (h *BaseAPIHandler) applyModelRouter(ctx context.Context, handlerType, mode
 	if host == nil || !modelRoutersEnabled(host, execOptions.SkipRouterPluginID) {
 		return decision
 	}
-	meta := requestExecutionMetadata(ctx)
+	meta := requestExecutionMetadata(ctx, h.Cfg)
 	meta[coreexecutor.RequestedModelMetadataKey] = modelName
 	addModelExecutionSourceMetadata(meta, execOptions.InternalSource)
 	resp, ok := routeModel(ctx, host, pluginapi.ModelRouteRequest{

@@ -228,6 +228,9 @@ func (s *authScheduler) pickSingleWithStrategy(ctx context.Context, provider, mo
 		if pinnedAuthID != "" && entry.auth.ID != pinnedAuthID {
 			return false
 		}
+		if !authAllowedByClientPolicy(entry.auth.ID, opts.Metadata) {
+			return false
+		}
 		if len(tried) > 0 {
 			if _, ok := tried[entry.auth.ID]; ok {
 				return false
@@ -295,7 +298,7 @@ func (s *authScheduler) pickMixedWithStrategy(ctx context.Context, providers []s
 		}
 		shard := providerState.ensureModelLocked(modelKey, time.Now())
 		predicate := func(entry *scheduledAuth) bool {
-			if entry == nil || entry.auth == nil || entry.auth.ID != pinnedAuthID {
+			if entry == nil || entry.auth == nil || entry.auth.ID != pinnedAuthID || !authAllowedByClientPolicy(entry.auth.ID, opts.Metadata) {
 				return false
 			}
 			if len(tried) == 0 {
@@ -310,7 +313,7 @@ func (s *authScheduler) pickMixedWithStrategy(ctx context.Context, providers []s
 		return nil, "", shard.unavailableErrorLocked("mixed", model, predicate)
 	}
 
-	predicate := triedPredicate(tried)
+	predicate := clientPolicyPredicate(opts.Metadata, tried)
 	candidateShards := make([]*modelScheduler, len(normalized))
 	bestPriority := 0
 	hasCandidate := false
@@ -454,6 +457,16 @@ func triedPredicate(tried map[string]struct{}) func(*scheduledAuth) bool {
 		}
 		_, ok := tried[entry.auth.ID]
 		return !ok
+	}
+}
+
+func clientPolicyPredicate(meta map[string]any, tried map[string]struct{}) func(*scheduledAuth) bool {
+	return func(entry *scheduledAuth) bool {
+		if entry == nil || entry.auth == nil || !authAllowedByClientPolicy(entry.auth.ID, meta) {
+			return false
+		}
+		_, used := tried[entry.auth.ID]
+		return !used
 	}
 }
 

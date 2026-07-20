@@ -111,6 +111,35 @@ func TestPickNextViaHomeKeepsSameAuthIDPayloadSessionScoped(t *testing.T) {
 	}
 }
 
+func TestPickNextViaHomePinnedWebsocketAuthObeysClientPolicy(t *testing.T) {
+	manager := NewManager(nil, nil, nil)
+	manager.SetConfig(&internalconfig.Config{Home: internalconfig.HomeConfig{Enabled: true}})
+	manager.RegisterExecutor(schedulerTestExecutor{})
+	manager.rememberHomeRuntimeAuth("session-policy", &Auth{
+		ID:       "home-team-auth",
+		Provider: "test",
+		Status:   StatusActive,
+		Attributes: map[string]string{
+			"websockets": "true",
+		},
+	})
+
+	ctx := cliproxyexecutor.WithDownstreamWebsocket(context.Background())
+	opts := cliproxyexecutor.Options{Metadata: map[string]any{
+		cliproxyexecutor.ExecutionSessionMetadataKey: "session-policy",
+		cliproxyexecutor.PinnedAuthMetadataKey:       "home-team-auth",
+		cliproxyexecutor.ExcludedAuthIDsMetadataKey:  []string{"home-team-auth"},
+	}}
+
+	got, executor, provider, err := manager.pickNextViaHome(ctx, "gpt-5.4", opts, nil)
+	if err == nil {
+		t.Fatal("pickNextViaHome() error is nil, want policy rejection")
+	}
+	if got != nil || executor != nil || provider != "" {
+		t.Fatalf("policy-excluded cached auth returned: auth=%#v executor=%#v provider=%q", got, executor, provider)
+	}
+}
+
 func TestPickNextViaHomeDoesNotReuseTriedPinnedWebsocketAuth(t *testing.T) {
 	manager := NewManager(nil, nil, nil)
 	manager.SetConfig(&internalconfig.Config{Home: internalconfig.HomeConfig{Enabled: true}})

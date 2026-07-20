@@ -34,6 +34,11 @@ const GenerateMetadataKey = "generate"
 const (
 	// PinnedAuthMetadataKey locks execution to a specific auth ID.
 	PinnedAuthMetadataKey = "pinned_auth_id"
+	// AllowedAuthIDsMetadataKey limits auth selection to an explicit set of auth IDs.
+	// Presence with an empty set denies all auths.
+	AllowedAuthIDsMetadataKey = "allowed_auth_ids"
+	// ExcludedAuthIDsMetadataKey removes protected auth IDs from selection.
+	ExcludedAuthIDsMetadataKey = "excluded_auth_ids"
 	// SelectedAuthMetadataKey stores the auth ID selected by the scheduler.
 	SelectedAuthMetadataKey = "selected_auth_id"
 	// SelectedAuthCallbackMetadataKey carries an optional callback invoked with the selected auth ID.

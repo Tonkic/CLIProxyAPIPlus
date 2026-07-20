@@ -87,6 +87,34 @@ go build -o cli-proxy-api-plus ./cmd/server
 ./cli-proxy-api-plus --config ./config.yaml
 ```
 
+## API Key 与凭证池绑定
+
+使用 `api-key-auth-bindings` 可以限制某些客户端 API Key 只能使用指定的认证凭证。例如，让团队专用 Key 只能使用两个 Team 账号：
+
+```yaml
+api-keys:
+  - sk-public-normal
+  - sk-team-exclusive
+
+api-key-auth-bindings:
+  - api-keys:
+      - sk-team-exclusive
+    auth-ids:
+      - codex-team-account-a.json
+      - codex-team-account-b.json
+```
+
+对于文件型认证凭证，`auth-ids` 通常就是认证目录中的 JSON 文件名，也可以通过管理接口返回的 auth ID 确认实际值。
+
+- `sk-team-exclusive` 只能在两个 Team 凭证之间调度和故障切换。
+- 普通 API Key 无法使用任何绑定中列出的受保护凭证。
+- 专用凭证全部不可用时不会回退到公共凭证池。
+- 同一个 API Key 出现在多个绑定中时，其 `auth-ids` 会合并。
+- 匹配的绑定没有有效 `auth-ids` 时，该 API Key 无法使用任何凭证。
+- 修改绑定配置后会随配置热加载生效，无需重启服务。
+
+不要把真实 API Key 提交到公开仓库。完整注释示例也可以在 `config.example.yaml` 中找到。
+
 ## 与 CPA-Manager-Plus 一起运行
 
 release 包包含简短的 Linux 辅助脚本和 CPA-Manager-Plus 二进制：
