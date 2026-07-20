@@ -140,3 +140,70 @@ func sanitizeOpenAIResponsesReasoningEncryptedContent(ctx context.Context, provi
 	}
 	return updated
 }
+
+func stripOpenAIResponsesReasoningState(body []byte) ([]byte, bool) {
+	store := gjson.GetBytes(body, "store")
+	if !store.Exists() || store.Bool() {
+		return body, false
+	}
+	input := gjson.GetBytes(body, "input")
+	if !input.Exists() || !input.IsArray() {
+		return body, false
+	}
+
+	items := input.Array()
+	var rebuilt []byte
+	itemsWritten := 0
+	changed := false
+	keep := func(raw string) {
+		if rebuilt == nil {
+			return
+		}
+		if itemsWritten > 0 {
+			rebuilt = append(rebuilt, ',')
+		}
+		rebuilt = append(rebuilt, raw...)
+		itemsWritten++
+	}
+	startRebuild := func(index int) {
+		if rebuilt != nil {
+			return
+		}
+		rebuilt = make([]byte, 0, len(input.Raw))
+		rebuilt = append(rebuilt, '[')
+		for i := range index {
+			keep(items[i].Raw)
+		}
+	}
+
+	for index, item := range items {
+		if strings.TrimSpace(item.Get("type").String()) != "reasoning" || !item.Get("encrypted_content").Exists() {
+			keep(item.Raw)
+			continue
+		}
+
+		nextItem, err := sjson.Delete(item.Raw, "encrypted_content")
+		if err != nil {
+			keep(item.Raw)
+			continue
+		}
+		if item.Get("id").Exists() {
+			if withoutID, errID := sjson.Delete(nextItem, "id"); errID == nil {
+				nextItem = withoutID
+			}
+		}
+		startRebuild(index)
+		keep(nextItem)
+		changed = true
+	}
+
+	if !changed {
+		return body, false
+	}
+	rebuilt = append(rebuilt, ']')
+	updated, err := sjson.SetRawBytes(body, "input", rebuilt)
+	if err != nil {
+		return body, false
+	}
+	return updated, true
+}

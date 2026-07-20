@@ -154,6 +154,14 @@ func TestNewCodexStatusErrClassifiesKnownCodexFailures(t *testing.T) {
 			wantCode:   "thinking_signature_invalid",
 		},
 		{
+			name:       "thinking signature upstream code",
+			statusCode: http.StatusBadRequest,
+			body:       []byte(`{"error":{"message":"The encrypted content could not be decrypted or parsed.","type":"invalid_request_error","code":"thinking_signature_invalid"}}`),
+			wantStatus: http.StatusBadRequest,
+			wantType:   "invalid_request_error",
+			wantCode:   "thinking_signature_invalid",
+		},
+		{
 			name:       "previous response missing",
 			statusCode: http.StatusBadRequest,
 			body:       []byte(`{"error":{"message":"No response found for previous_response_id resp_123","type":"invalid_request_error","code":"previous_response_not_found"}}`),
