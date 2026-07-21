@@ -1135,6 +1135,7 @@ func (h *Handler) PatchCodexKey(c *gin.Context) {
 		Models         *[]config.CodexModel `json:"models"`
 		Headers        *map[string]string   `json:"headers"`
 		ExcludedModels *[]string            `json:"excluded-models"`
+		MaxConcurrency *int                 `json:"max-concurrency"`
 	}
 	var body struct {
 		Index *int           `json:"index"`
@@ -1194,6 +1195,9 @@ func (h *Handler) PatchCodexKey(c *gin.Context) {
 	}
 	if body.Value.ExcludedModels != nil {
 		entry.ExcludedModels = config.NormalizeExcludedModels(*body.Value.ExcludedModels)
+	}
+	if body.Value.MaxConcurrency != nil {
+		entry.MaxConcurrency = *body.Value.MaxConcurrency
 	}
 	normalizeCodexKey(&entry)
 	h.cfg.CodexKey[targetIndex] = entry

@@ -610,6 +610,10 @@ type CodexKey struct {
 	// Websockets enables the Responses API websocket transport for this credential.
 	Websockets bool `yaml:"websockets,omitempty" json:"websockets,omitempty"`
 
+	// MaxConcurrency limits concurrent requests using this credential.
+	// Zero means unlimited.
+	MaxConcurrency int `yaml:"max-concurrency,omitempty" json:"max-concurrency,omitempty"`
+
 	// ProxyURL overrides the global proxy setting for this API key if provided.
 	ProxyURL string `yaml:"proxy-url" json:"proxy-url"`
 
@@ -1253,6 +1257,9 @@ func sanitizeCodexKeyEntries(entries []CodexKey) []CodexKey {
 		e := entries[i]
 		e.Prefix = normalizeModelPrefix(e.Prefix)
 		e.BaseURL = strings.TrimSpace(e.BaseURL)
+		if e.MaxConcurrency < 0 {
+			e.MaxConcurrency = 0
+		}
 		e.Headers = NormalizeHeaders(e.Headers)
 		e.ExcludedModels = NormalizeExcludedModels(e.ExcludedModels)
 		if e.BaseURL == "" {

@@ -306,6 +306,7 @@ func TestConfigSynthesizer_CodexKeys(t *testing.T) {
 					BaseURL:        "https://api.openai.com",
 					ProxyURL:       "http://proxy.local",
 					Websockets:     true,
+					MaxConcurrency: 1,
 					DisableCooling: true,
 				},
 			},
@@ -333,6 +334,9 @@ func TestConfigSynthesizer_CodexKeys(t *testing.T) {
 	}
 	if auths[0].Attributes["websockets"] != "true" {
 		t.Errorf("expected websockets=true, got %s", auths[0].Attributes["websockets"])
+	}
+	if auths[0].Attributes[coreauth.AttributeMaxConcurrency] != "1" {
+		t.Errorf("expected max_concurrency=1, got %s", auths[0].Attributes[coreauth.AttributeMaxConcurrency])
 	}
 	if v, ok := auths[0].Metadata["disable_cooling"].(bool); !ok || !v {
 		t.Errorf("expected disable_cooling=true, got %v", auths[0].Metadata["disable_cooling"])

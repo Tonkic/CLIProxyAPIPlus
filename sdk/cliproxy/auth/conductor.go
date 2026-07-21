@@ -259,6 +259,109 @@ type Manager struct {
 	// refreshLocks serializes credential refresh per auth ID so concurrent
 	// 401 recoveries and auto-refresh workers do not race the same refresh_token.
 	refreshLocks sync.Map
+	// authConcurrency tracks active requests for credentials with a configured
+	// max-concurrency limit. Entries are keyed by stable auth ID.
+	authConcurrency sync.Map
+}
+
+type authConcurrencyState struct {
+	mu     sync.Mutex
+	active int
+}
+
+func (m *Manager) tryAcquireAuthConcurrency(auth *Auth) (func(), bool) {
+	if m == nil || auth == nil || auth.Attributes == nil {
+		return func() {}, true
+	}
+	limit, err := strconv.Atoi(strings.TrimSpace(auth.Attributes[AttributeMaxConcurrency]))
+	if err != nil || limit <= 0 {
+		return func() {}, true
+	}
+	authID := strings.TrimSpace(auth.ID)
+	if authID == "" {
+		return func() {}, true
+	}
+	value, _ := m.authConcurrency.LoadOrStore(authID, &authConcurrencyState{})
+	state, ok := value.(*authConcurrencyState)
+	if !ok || state == nil {
+		return func() {}, true
+	}
+	state.mu.Lock()
+	if state.active >= limit {
+		state.mu.Unlock()
+		return nil, false
+	}
+	state.active++
+	state.mu.Unlock()
+
+	var once sync.Once
+	return func() {
+		once.Do(func() {
+			state.mu.Lock()
+			if state.active > 0 {
+				state.active--
+			}
+			state.mu.Unlock()
+		})
+	}, true
+}
+
+func authConcurrencyError(auth *Auth) *Error {
+	provider := "credential"
+	if auth != nil && strings.TrimSpace(auth.Provider) != "" {
+		provider = strings.TrimSpace(auth.Provider) + " credential"
+	}
+	return &Error{
+		Code:       "auth_concurrency_exceeded",
+		Message:    provider + " is at its concurrency limit",
+		Retryable:  true,
+		HTTPStatus: http.StatusTooManyRequests,
+	}
+}
+
+func wrapStreamWithAuthConcurrency(ctx context.Context, result *cliproxyexecutor.StreamResult, release func()) *cliproxyexecutor.StreamResult {
+	if result == nil || release == nil {
+		return result
+	}
+	if result.Chunks == nil {
+		release()
+		return result
+	}
+	out := make(chan cliproxyexecutor.StreamChunk)
+	go func() {
+		defer close(out)
+		defer release()
+		for {
+			var (
+				chunk cliproxyexecutor.StreamChunk
+				ok    bool
+			)
+			if ctx == nil {
+				chunk, ok = <-result.Chunks
+			} else {
+				select {
+				case <-ctx.Done():
+					discardStreamChunks(result.Chunks)
+					return
+				case chunk, ok = <-result.Chunks:
+				}
+			}
+			if !ok {
+				return
+			}
+			if ctx == nil {
+				out <- chunk
+				continue
+			}
+			select {
+			case <-ctx.Done():
+				discardStreamChunks(result.Chunks)
+				return
+			case out <- chunk:
+			}
+		}
+	}()
+	return &cliproxyexecutor.StreamResult{Headers: result.Headers, Chunks: out}
 }
 
 // NewManager constructs a manager with optional custom selector and hook.
@@ -2594,21 +2697,29 @@ func (m *Manager) executeMixedOnce(ctx context.Context, providers []string, req 
 			}
 			execOpts := opts
 			execReq, execOpts = applyRequestAfterAuthInterceptor(execCtx, executor, provider, execReq, execOpts, requestedModelAliasFromOptions(execOpts, routeModel))
-			resp, errExec := executor.Execute(execCtx, auth, execReq, execOpts)
-			if errExec != nil {
-				if errCtx := execCtx.Err(); errCtx != nil {
-					return cliproxyexecutor.Response{}, errCtx
-				}
-				if refreshed, okRefresh := m.tryRefreshAfterUnauthorized(execCtx, auth, errExec, didRefreshOnUnauthorized); okRefresh {
-					auth = refreshed
-					didRefreshOnUnauthorized = true
-					resp, errExec = executor.Execute(execCtx, auth, execReq, execOpts)
-					if errExec != nil {
-						if errCtx := execCtx.Err(); errCtx != nil {
-							return cliproxyexecutor.Response{}, errCtx
-						}
+			release, acquired := m.tryAcquireAuthConcurrency(auth)
+			if !acquired {
+				delete(attempted, auth.ID)
+				authErr = authConcurrencyError(auth)
+				break
+			}
+			resp, errExec := func() (cliproxyexecutor.Response, error) {
+				defer release()
+				respAttempt, errAttempt := executor.Execute(execCtx, auth, execReq, execOpts)
+				if errAttempt != nil {
+					if errCtx := execCtx.Err(); errCtx != nil {
+						return cliproxyexecutor.Response{}, errCtx
+					}
+					if refreshed, okRefresh := m.tryRefreshAfterUnauthorized(execCtx, auth, errAttempt, didRefreshOnUnauthorized); okRefresh {
+						auth = refreshed
+						didRefreshOnUnauthorized = true
+						respAttempt, errAttempt = executor.Execute(execCtx, auth, execReq, execOpts)
 					}
 				}
+				return respAttempt, errAttempt
+			}()
+			if errCtx := execCtx.Err(); errCtx != nil {
+				return cliproxyexecutor.Response{}, errCtx
 			}
 			result := Result{AuthID: auth.ID, Provider: provider, Model: resultModel, Success: errExec == nil}
 			if errExec != nil {
@@ -2707,21 +2818,29 @@ func (m *Manager) executeCountMixedOnce(ctx context.Context, providers []string,
 			}
 			execOpts := opts
 			execReq, execOpts = applyRequestAfterAuthInterceptor(execCtx, executor, provider, execReq, execOpts, requestedModelAliasFromOptions(execOpts, routeModel))
-			resp, errExec := executor.CountTokens(execCtx, auth, execReq, execOpts)
-			if errExec != nil {
-				if errCtx := execCtx.Err(); errCtx != nil {
-					return cliproxyexecutor.Response{}, errCtx
-				}
-				if refreshed, okRefresh := m.tryRefreshAfterUnauthorized(execCtx, auth, errExec, didRefreshOnUnauthorized); okRefresh {
-					auth = refreshed
-					didRefreshOnUnauthorized = true
-					resp, errExec = executor.CountTokens(execCtx, auth, execReq, execOpts)
-					if errExec != nil {
-						if errCtx := execCtx.Err(); errCtx != nil {
-							return cliproxyexecutor.Response{}, errCtx
-						}
+			release, acquired := m.tryAcquireAuthConcurrency(auth)
+			if !acquired {
+				delete(attempted, auth.ID)
+				authErr = authConcurrencyError(auth)
+				break
+			}
+			resp, errExec := func() (cliproxyexecutor.Response, error) {
+				defer release()
+				respAttempt, errAttempt := executor.CountTokens(execCtx, auth, execReq, execOpts)
+				if errAttempt != nil {
+					if errCtx := execCtx.Err(); errCtx != nil {
+						return cliproxyexecutor.Response{}, errCtx
+					}
+					if refreshed, okRefresh := m.tryRefreshAfterUnauthorized(execCtx, auth, errAttempt, didRefreshOnUnauthorized); okRefresh {
+						auth = refreshed
+						didRefreshOnUnauthorized = true
+						respAttempt, errAttempt = executor.CountTokens(execCtx, auth, execReq, execOpts)
 					}
 				}
+				return respAttempt, errAttempt
+			}()
+			if errCtx := execCtx.Err(); errCtx != nil {
+				return cliproxyexecutor.Response{}, errCtx
 			}
 			result := Result{AuthID: auth.ID, Provider: provider, Model: resultModel, Success: errExec == nil}
 			if errExec != nil {
@@ -2815,6 +2934,12 @@ func (m *Manager) executeStreamMixedOnce(ctx context.Context, providers []string
 			lastErr = errPrepare
 			continue
 		}
+		release, acquired := m.tryAcquireAuthConcurrency(auth)
+		if !acquired {
+			delete(attempted, auth.ID)
+			lastErr = authConcurrencyError(auth)
+			continue
+		}
 		execReq := sanitizeDownstreamWebsocketFallbackRequest(execCtx, auth, req)
 		streamExecutionModel := ""
 		if restoreExecutionModel {
@@ -2822,6 +2947,7 @@ func (m *Manager) executeStreamMixedOnce(ctx context.Context, providers []string
 		}
 		streamResult, errStream := m.executeStreamWithModelPool(execCtx, executor, auth, provider, execReq, opts, routeModel, streamExecutionModel, models, pooled, aliasResult)
 		if errStream != nil {
+			release()
 			if errCtx := execCtx.Err(); errCtx != nil {
 				return nil, errCtx
 			}
@@ -2834,7 +2960,7 @@ func (m *Manager) executeStreamMixedOnce(ctx context.Context, providers []string
 			}
 			continue
 		}
-		return streamResult, nil
+		return wrapStreamWithAuthConcurrency(execCtx, streamResult, release), nil
 	}
 }
 

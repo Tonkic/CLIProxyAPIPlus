@@ -216,6 +216,9 @@ func (s *ConfigSynthesizer) synthesizeCodexStyleKeys(ctx *SynthesisContext, entr
 		if entry.Websockets {
 			attrs["websockets"] = "true"
 		}
+		if provider == "codex" && entry.MaxConcurrency > 0 {
+			attrs[coreauth.AttributeMaxConcurrency] = strconv.Itoa(entry.MaxConcurrency)
+		}
 		if hash := diff.ComputeCodexModelsHash(entry.Models); hash != "" {
 			attrs["models_hash"] = hash
 		}

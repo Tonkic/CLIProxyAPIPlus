@@ -259,6 +259,7 @@ nonstream-keepalive-interval: 0
 #   - api-key: "sk-atSM..."
 #     prefix: "test" # optional: require calls like "test/gpt-5-codex" to target this credential
 #     disable-cooling: false # optional: per-auth override for auth/model cooldown scheduling
+#     max-concurrency: 1 # optional: maximum concurrent requests for only this credential; 0/unset means unlimited
 #     base-url: "https://www.example.com" # use the custom codex API endpoint
 #     headers:
 #       X-Custom-Header: "custom-value"
