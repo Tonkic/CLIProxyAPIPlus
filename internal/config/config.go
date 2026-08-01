@@ -322,6 +322,8 @@ type XAIConfig struct {
 // CodexConfig configures provider-wide Codex request behavior.
 type CodexConfig struct {
 	IdentityConfuse bool `yaml:"identity-confuse" json:"identity-confuse"`
+	// DisableCodexCloaking disables forcing the official Codex identity headers on HTTP requests.
+	DisableCodexCloaking bool `yaml:"disable-codex-cloaking" json:"disable-codex-cloaking"`
 	// OptimizeMultiAgentV2 optimizes official Codex multi-agent requests.
 	OptimizeMultiAgentV2 bool `yaml:"optimize-multi-agent-v2" json:"optimize-multi-agent-v2"`
 	// LiveMediaRelay terminates and relays Codex Live WebRTC media in this process.
@@ -568,7 +570,8 @@ type ClaudeKey struct {
 
 	// Priority controls selection preference when multiple credentials match.
 	// Higher values are preferred; defaults to 0.
-	Priority int `yaml:"priority,omitempty" json:"priority,omitempty"`
+	Priority int  `yaml:"priority,omitempty" json:"priority,omitempty"`
+	Weight   *int `yaml:"weight,omitempty" json:"weight,omitempty"`
 
 	// Prefix optionally namespaces models for this credential (e.g., "teamA/claude-sonnet-4").
 	Prefix string `yaml:"prefix,omitempty" json:"prefix,omitempty"`
@@ -604,8 +607,10 @@ type ClaudeKey struct {
 	ExperimentalCCHSigning bool `yaml:"experimental-cch-signing,omitempty" json:"experimental-cch-signing,omitempty"`
 }
 
-func (k ClaudeKey) GetAPIKey() string  { return k.APIKey }
-func (k ClaudeKey) GetBaseURL() string { return k.BaseURL }
+func (k ClaudeKey) GetAPIKey() string   { return k.APIKey }
+func (k ClaudeKey) GetBaseURL() string  { return k.BaseURL }
+func (k ClaudeKey) GetPrefix() string   { return k.Prefix }
+func (k ClaudeKey) GetProxyURL() string { return k.ProxyURL }
 
 // ClaudeModel describes a mapping between an alias and the actual upstream model name.
 type ClaudeModel struct {
@@ -620,12 +625,16 @@ type ClaudeModel struct {
 
 	// ForceMapping rewrites upstream response model fields back to Alias.
 	ForceMapping bool `yaml:"force-mapping,omitempty" json:"force-mapping,omitempty"`
+
+	// Thinking configures the thinking/reasoning capability for this model.
+	Thinking *registry.ThinkingSupport `yaml:"thinking,omitempty" json:"thinking,omitempty"`
 }
 
-func (m ClaudeModel) GetName() string        { return m.Name }
-func (m ClaudeModel) GetAlias() string       { return m.Alias }
-func (m ClaudeModel) GetDisplayName() string { return m.DisplayName }
-func (m ClaudeModel) GetForceMapping() bool  { return m.ForceMapping }
+func (m ClaudeModel) GetName() string                        { return m.Name }
+func (m ClaudeModel) GetAlias() string                       { return m.Alias }
+func (m ClaudeModel) GetDisplayName() string                 { return m.DisplayName }
+func (m ClaudeModel) GetForceMapping() bool                  { return m.ForceMapping }
+func (m ClaudeModel) GetThinking() *registry.ThinkingSupport { return m.Thinking }
 
 // CodexKey represents the configuration for a Codex API key,
 // including the API key itself and an optional base URL for the API endpoint.
@@ -635,7 +644,8 @@ type CodexKey struct {
 
 	// Priority controls selection preference when multiple credentials match.
 	// Higher values are preferred; defaults to 0.
-	Priority int `yaml:"priority,omitempty" json:"priority,omitempty"`
+	Priority int  `yaml:"priority,omitempty" json:"priority,omitempty"`
+	Weight   *int `yaml:"weight,omitempty" json:"weight,omitempty"`
 
 	// Prefix optionally namespaces models for this credential (e.g., "teamA/gpt-5-codex").
 	Prefix string `yaml:"prefix,omitempty" json:"prefix,omitempty"`
@@ -667,8 +677,10 @@ type CodexKey struct {
 	DisableCooling bool `yaml:"disable-cooling,omitempty" json:"disable-cooling,omitempty"`
 }
 
-func (k CodexKey) GetAPIKey() string  { return k.APIKey }
-func (k CodexKey) GetBaseURL() string { return k.BaseURL }
+func (k CodexKey) GetAPIKey() string   { return k.APIKey }
+func (k CodexKey) GetBaseURL() string  { return k.BaseURL }
+func (k CodexKey) GetPrefix() string   { return k.Prefix }
+func (k CodexKey) GetProxyURL() string { return k.ProxyURL }
 
 // CodexModel describes a mapping between an alias and the actual upstream model name.
 type CodexModel struct {
@@ -683,12 +695,16 @@ type CodexModel struct {
 
 	// ForceMapping rewrites upstream response model fields back to Alias.
 	ForceMapping bool `yaml:"force-mapping,omitempty" json:"force-mapping,omitempty"`
+
+	// Thinking configures the thinking/reasoning capability for this model.
+	Thinking *registry.ThinkingSupport `yaml:"thinking,omitempty" json:"thinking,omitempty"`
 }
 
-func (m CodexModel) GetName() string        { return m.Name }
-func (m CodexModel) GetAlias() string       { return m.Alias }
-func (m CodexModel) GetDisplayName() string { return m.DisplayName }
-func (m CodexModel) GetForceMapping() bool  { return m.ForceMapping }
+func (m CodexModel) GetName() string                        { return m.Name }
+func (m CodexModel) GetAlias() string                       { return m.Alias }
+func (m CodexModel) GetDisplayName() string                 { return m.DisplayName }
+func (m CodexModel) GetForceMapping() bool                  { return m.ForceMapping }
+func (m CodexModel) GetThinking() *registry.ThinkingSupport { return m.Thinking }
 
 // XAIKey uses the Codex API key structure for native xAI execution.
 type XAIKey = CodexKey
@@ -704,7 +720,8 @@ type GeminiKey struct {
 
 	// Priority controls selection preference when multiple credentials match.
 	// Higher values are preferred; defaults to 0.
-	Priority int `yaml:"priority,omitempty" json:"priority,omitempty"`
+	Priority int  `yaml:"priority,omitempty" json:"priority,omitempty"`
+	Weight   *int `yaml:"weight,omitempty" json:"weight,omitempty"`
 
 	// Prefix optionally namespaces models for this credential (e.g., "teamA/gemini-3-pro-preview").
 	Prefix string `yaml:"prefix,omitempty" json:"prefix,omitempty"`
@@ -728,8 +745,10 @@ type GeminiKey struct {
 	DisableCooling bool `yaml:"disable-cooling,omitempty" json:"disable-cooling,omitempty"`
 }
 
-func (k GeminiKey) GetAPIKey() string  { return k.APIKey }
-func (k GeminiKey) GetBaseURL() string { return k.BaseURL }
+func (k GeminiKey) GetAPIKey() string   { return k.APIKey }
+func (k GeminiKey) GetBaseURL() string  { return k.BaseURL }
+func (k GeminiKey) GetPrefix() string   { return k.Prefix }
+func (k GeminiKey) GetProxyURL() string { return k.ProxyURL }
 
 // GeminiModel describes a mapping between an alias and the actual upstream model name.
 type GeminiModel struct {
@@ -744,12 +763,16 @@ type GeminiModel struct {
 
 	// ForceMapping rewrites upstream response model fields back to Alias.
 	ForceMapping bool `yaml:"force-mapping,omitempty" json:"force-mapping,omitempty"`
+
+	// Thinking configures the thinking/reasoning capability for this model.
+	Thinking *registry.ThinkingSupport `yaml:"thinking,omitempty" json:"thinking,omitempty"`
 }
 
-func (m GeminiModel) GetName() string        { return m.Name }
-func (m GeminiModel) GetAlias() string       { return m.Alias }
-func (m GeminiModel) GetDisplayName() string { return m.DisplayName }
-func (m GeminiModel) GetForceMapping() bool  { return m.ForceMapping }
+func (m GeminiModel) GetName() string                        { return m.Name }
+func (m GeminiModel) GetAlias() string                       { return m.Alias }
+func (m GeminiModel) GetDisplayName() string                 { return m.DisplayName }
+func (m GeminiModel) GetForceMapping() bool                  { return m.ForceMapping }
+func (m GeminiModel) GetThinking() *registry.ThinkingSupport { return m.Thinking }
 
 // KiroKey represents the configuration for Kiro (AWS CodeWhisperer) authentication.
 type KiroKey struct {
@@ -833,6 +856,7 @@ type OpenAICompatibility struct {
 type OpenAICompatibilityAPIKey struct {
 	// APIKey is the authentication key for accessing the external API services.
 	APIKey string `yaml:"api-key" json:"api-key"`
+	Weight *int   `yaml:"weight,omitempty" json:"weight,omitempty"`
 
 	// ProxyURL overrides the global proxy setting for this API key if provided.
 	ProxyURL string `yaml:"proxy-url,omitempty" json:"proxy-url,omitempty"`
@@ -868,10 +892,11 @@ type OpenAICompatibilityModel struct {
 	Thinking *registry.ThinkingSupport `yaml:"thinking,omitempty" json:"thinking,omitempty"`
 }
 
-func (m OpenAICompatibilityModel) GetName() string        { return m.Name }
-func (m OpenAICompatibilityModel) GetAlias() string       { return m.Alias }
-func (m OpenAICompatibilityModel) GetDisplayName() string { return m.DisplayName }
-func (m OpenAICompatibilityModel) GetForceMapping() bool  { return m.ForceMapping }
+func (m OpenAICompatibilityModel) GetName() string                        { return m.Name }
+func (m OpenAICompatibilityModel) GetAlias() string                       { return m.Alias }
+func (m OpenAICompatibilityModel) GetDisplayName() string                 { return m.DisplayName }
+func (m OpenAICompatibilityModel) GetForceMapping() bool                  { return m.ForceMapping }
+func (m OpenAICompatibilityModel) GetThinking() *registry.ThinkingSupport { return m.Thinking }
 
 // LoadConfig reads a YAML configuration file from the given path,
 // unmarshals it into a Config struct, applies environment variable overrides,
@@ -959,6 +984,12 @@ func LoadConfigOptional(configFile string, optional bool) (*Config, error) {
 	// }
 	cfg.CredentialConcurrency = cfg.CredentialConcurrency.WithDefaults()
 	if errValidate := cfg.CredentialInFlight.Validate(); errValidate != nil {
+		return nil, errValidate
+	}
+	if errValidate := cfg.Codex.LiveMediaRelay.Validate(); errValidate != nil {
+		return nil, errValidate
+	}
+	if errValidate := cfg.ValidateCredentialWeights(); errValidate != nil {
 		return nil, errValidate
 	}
 

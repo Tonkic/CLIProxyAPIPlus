@@ -9,6 +9,7 @@ import (
 	"crypto/subtle"
 	"encoding/json"
 	"fmt"
+	"net"
 	"net/http"
 	"reflect"
 	"sort"
@@ -35,6 +36,17 @@ import (
 type ErrorResponse struct {
 	// Error contains detailed information about the error that occurred.
 	Error ErrorDetail `json:"error"`
+}
+
+func requestClientIP(request *http.Request) string {
+	if request == nil {
+		return ""
+	}
+	remoteAddr := strings.TrimSpace(request.RemoteAddr)
+	if host, _, errSplit := net.SplitHostPort(remoteAddr); errSplit == nil {
+		return strings.TrimSpace(host)
+	}
+	return remoteAddr
 }
 
 // ErrorDetail provides specific information about an error that occurred.
@@ -490,6 +502,13 @@ func (h *BaseAPIHandler) GetContextWithCancel(handler interfaces.APIHandler, c *
 	}
 	if endpoint != "" {
 		newCtx = logging.WithEndpoint(newCtx, endpoint)
+	}
+	if c != nil && c.Request != nil {
+		newCtx = logging.WithClientRequestMetadata(newCtx, logging.ClientRequestMetadata{
+			ClientIP:      requestClientIP(c.Request),
+			XForwardedFor: strings.TrimSpace(strings.Join(c.Request.Header.Values("X-Forwarded-For"), ", ")),
+			UserAgent:     strings.TrimSpace(c.Request.UserAgent()),
+		})
 	}
 	newCtx = logging.WithResponseStatusHolder(newCtx)
 	newCtx = logging.WithResponseHeadersHolder(newCtx)

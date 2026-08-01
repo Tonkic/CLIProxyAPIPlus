@@ -7,12 +7,38 @@ import (
 	"testing"
 
 	"github.com/gin-gonic/gin"
-	"github.com/router-for-me/CLIProxyAPI/v7/internal/config"
+	internalconfig "github.com/router-for-me/CLIProxyAPI/v7/internal/config"
 	"github.com/router-for-me/CLIProxyAPI/v7/internal/logging"
 	coreexecutor "github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy/executor"
 	coresession "github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy/session"
+	sdkconfig "github.com/router-for-me/CLIProxyAPI/v7/sdk/config"
 	"golang.org/x/net/context"
 )
+
+func TestGetContextWithCancelCapturesClientRequestMetadata(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	ginCtx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	ginCtx.Request = httptest.NewRequest(http.MethodPost, "/v1/chat/completions", nil)
+	ginCtx.Request.RemoteAddr = "192.0.2.10:43123"
+	ginCtx.Request.Header.Add("X-Forwarded-For", "203.0.113.5")
+	ginCtx.Request.Header.Add("X-Forwarded-For", "198.51.100.8")
+	ginCtx.Request.Header.Set("User-Agent", "test-client/1.0")
+
+	handler := &BaseAPIHandler{Cfg: &sdkconfig.SDKConfig{}}
+	ctx, cancel := handler.GetContextWithCancel(nil, ginCtx, context.Background())
+	defer cancel()
+
+	metadata := logging.GetClientRequestMetadata(ctx)
+	if metadata.ClientIP != "192.0.2.10" {
+		t.Fatalf("ClientIP = %q, want direct peer IP", metadata.ClientIP)
+	}
+	if metadata.XForwardedFor != "203.0.113.5, 198.51.100.8" {
+		t.Fatalf("XForwardedFor = %q", metadata.XForwardedFor)
+	}
+	if metadata.UserAgent != "test-client/1.0" {
+		t.Fatalf("UserAgent = %q", metadata.UserAgent)
+	}
+}
 
 func TestRequestExecutionMetadataIncludesExecutionSessionWithoutIdempotencyKey(t *testing.T) {
 	ctx := WithExecutionSessionID(context.Background(), "session-1")
@@ -83,7 +109,7 @@ func TestRequestExecutionMetadataRestrictsBoundAPIKeyToConfiguredAuths(t *testin
 	ginCtx.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
 	ginCtx.Set("userApiKey", "sk-team-exclusive")
 	ctx := context.WithValue(context.Background(), "gin", ginCtx)
-	cfg := &config.SDKConfig{APIKeyAuthBindings: []config.APIKeyAuthBinding{
+	cfg := &sdkconfig.SDKConfig{APIKeyAuthBindings: []internalconfig.APIKeyAuthBinding{
 		{APIKeys: []string{"sk-team-exclusive"}, AuthIDs: []string{"team-b", "team-a"}},
 		{APIKeys: []string{"sk-team-exclusive"}, AuthIDs: []string{"team-a", "team-c"}},
 	}}
@@ -106,7 +132,7 @@ func TestRequestExecutionMetadataExcludesProtectedAuthsForOrdinaryAPIKey(t *test
 	ginCtx.Request.Header.Set("X-Allowed-Auth-IDs", "team-a")
 	ginCtx.Set("userApiKey", "sk-public-normal")
 	ctx := context.WithValue(context.Background(), "gin", ginCtx)
-	cfg := &config.SDKConfig{APIKeyAuthBindings: []config.APIKeyAuthBinding{
+	cfg := &sdkconfig.SDKConfig{APIKeyAuthBindings: []internalconfig.APIKeyAuthBinding{
 		{APIKeys: []string{"sk-team-exclusive"}, AuthIDs: []string{"team-b", "team-a"}},
 	}}
 
@@ -129,7 +155,7 @@ func TestRequestExecutionMetadataEmptyBoundAuthListDeniesAll(t *testing.T) {
 	ginCtx.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil)
 	ginCtx.Set("userApiKey", "sk-empty")
 	ctx := context.WithValue(context.Background(), "gin", ginCtx)
-	cfg := &config.SDKConfig{APIKeyAuthBindings: []config.APIKeyAuthBinding{{APIKeys: []string{"sk-empty"}}}}
+	cfg := &sdkconfig.SDKConfig{APIKeyAuthBindings: []internalconfig.APIKeyAuthBinding{{APIKeys: []string{"sk-empty"}}}}
 
 	meta := requestExecutionMetadata(ctx, cfg)
 
