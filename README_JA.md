@@ -125,18 +125,6 @@ tail -n 200 logs/cpa-manager-plus.err.log
 
 manager の永続データは `manager/data/` と `manager/config.json` に保存されます。`manager/data/usage.sqlite*` と `manager/data/data.key` を backup してください。update script は manager binary のみを置き換え、これらのファイルを保持します。
 
-Keeper を含む旧 release から更新する場合、`restart.sh` は旧 `keeper` tmux session を停止しますが、`keeper/` directory は削除しません。同じ usage queue を消費するため、Keeper と CPA-Manager-Plus を同時に実行しないでください。SQLite schema は互換性がないため、履歴データは database file のコピーではなく export/import が必要です。
-
-Keeper release は旧 updater を使用しています。初回 migration の前に、GitHub Release の standalone updater に置き換えてください。
-
-```bash
-curl -fL \
-  https://github.com/Tonkic/CLIProxyAPIPlus/releases/download/v7.2.91.1/update.sh \
-  -o ./update.sh.new
-chmod +x ./update.sh.new
-mv -f ./update.sh.new ./update.sh
-```
-
 ## Update
 
 デフォルトでは GitHub Release から直接 download します。

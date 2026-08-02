@@ -49,7 +49,7 @@ while [ "$#" -gt 0 ]; do
     *)
       append_arg "$1"
       case "$1" in
-        --root|--install-dir|--config|--cli-session|--manager-session|--manager-data-dir|--manager-addr|--manager-collector-mode|--log-dir|--legacy-keeper-session)
+        --root|--install-dir|--config|--cli-session|--manager-session|--manager-data-dir|--manager-addr|--manager-collector-mode|--log-dir)
           [ "$#" -ge 2 ] || fail "$1 requires a value"; append_arg "$2"; shift 2 ;;
         *) fail "unknown option: $1" ;;
       esac ;;

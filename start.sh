@@ -84,7 +84,6 @@ while [ "$#" -gt 0 ]; do
     --cpamp-service) [ "$#" -ge 2 ] || fail "$1 requires a value"; CPAMP_SERVICE=$2; shift 2 ;;
     --cli-session) [ "$#" -ge 2 ] || fail "$1 requires a value"; CLI_SESSION=$2; shift 2 ;;
     --manager-session) [ "$#" -ge 2 ] || fail "$1 requires a value"; MANAGER_SESSION=$2; shift 2 ;;
-    --legacy-keeper-session) [ "$#" -ge 2 ] || fail "$1 requires a value"; shift 2 ;;
     --manager-data-dir) [ "$#" -ge 2 ] || fail "$1 requires a value"; MANAGER_DATA_DIR=$2; shift 2 ;;
     --manager-addr) [ "$#" -ge 2 ] || fail "$1 requires a value"; MANAGER_ADDR=$2; shift 2 ;;
     --manager-collector-mode) [ "$#" -ge 2 ] || fail "$1 requires a value"; MANAGER_COLLECTOR_MODE=$2; shift 2 ;;

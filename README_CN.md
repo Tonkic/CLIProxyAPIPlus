@@ -160,18 +160,6 @@ tail -n 200 logs/cpa-manager-plus.err.log
 
 manager 的持久化文件位于 `manager/data/` 和 `manager/config.json`。建议备份 `manager/data/usage.sqlite*` 与 `manager/data/data.key`。更新脚本只替换 manager 二进制，不会覆盖这些文件。
 
-从旧 Keeper 版本升级时，`restart.sh` 会停止旧的 `keeper` tmux 会话，但完整保留 `keeper/` 目录。不要同时运行 Keeper 和 CPA-Manager-Plus，因为二者会消费同一个内存用量队列。两者的 SQLite 结构不兼容，历史 Keeper 数据需要先导出再导入，不能直接复制数据库文件。
-
-Keeper 版本使用的是旧 updater。首次迁移前，先从 GitHub Release 换成独立发布的新 updater：
-
-```bash
-curl -fL \
-  https://github.com/Tonkic/CLIProxyAPIPlus/releases/download/v7.2.91.1/update.sh \
-  -o ./update.sh.new
-chmod +x ./update.sh.new
-mv -f ./update.sh.new ./update.sh
-```
-
 ## 更新部署
 
 默认直接从 GitHub Release 下载：

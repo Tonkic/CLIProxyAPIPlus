@@ -137,18 +137,6 @@ tail -n 200 logs/cpa-manager-plus.err.log
 
 The manager keeps persistent state in `manager/data/` and `manager/config.json`. Back up `manager/data/usage.sqlite*` and `manager/data/data.key`. Updates replace only the manager binary and preserve these files.
 
-When upgrading from a Keeper-based release, `restart.sh` stops the legacy `keeper` tmux session but leaves the entire `keeper/` directory untouched. Do not run Keeper and CPA-Manager-Plus at the same time because both consume the same in-memory usage queue. Their SQLite schemas are incompatible, so historical Keeper data must be exported and imported rather than copied over the manager database.
-
-Keeper-based releases use an older updater. Before the first migration, replace it with the standalone updater from GitHub Releases:
-
-```bash
-curl -fL \
-  https://github.com/Tonkic/CLIProxyAPIPlus/releases/download/v7.2.91.1/update.sh \
-  -o ./update.sh.new
-chmod +x ./update.sh.new
-mv -f ./update.sh.new ./update.sh
-```
-
 ## Deployment Updates
 
 GitHub Releases are the default download source:

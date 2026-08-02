@@ -6,7 +6,6 @@ CPA_SERVICE=${CPA_SERVICE:-cpa.service}
 CPAMP_SERVICE=${CPAMP_SERVICE:-cpamp.service}
 CLI_SESSION=${CLI_SESSION:-cli}
 MANAGER_SESSION=${MANAGER_SESSION:-manager}
-LEGACY_KEEPER_SESSION=${LEGACY_KEEPER_SESSION:-keeper}
 DRY_RUN=0
 
 usage() {
@@ -21,7 +20,6 @@ Options:
   --cpamp-service UNIT           CPAMP systemd unit. Defaults to cpamp.service.
   --cli-session NAME             Proxy tmux session. Defaults to cli.
   --manager-session NAME         Manager tmux session. Defaults to manager.
-  --legacy-keeper-session NAME   Old Keeper tmux session. Defaults to keeper.
   --dry-run                      Print commands only.
   --help                         Show this help.
 EOF
@@ -52,7 +50,6 @@ while [ "$#" -gt 0 ]; do
     --health-timeout) [ "$#" -ge 2 ] || fail "$1 requires a value"; shift 2 ;;
     --cli-session) [ "$#" -ge 2 ] || fail "$1 requires a value"; CLI_SESSION=$2; shift 2 ;;
     --manager-session) [ "$#" -ge 2 ] || fail "$1 requires a value"; MANAGER_SESSION=$2; shift 2 ;;
-    --legacy-keeper-session) [ "$#" -ge 2 ] || fail "$1 requires a value"; LEGACY_KEEPER_SESSION=$2; shift 2 ;;
     --dry-run) DRY_RUN=1; shift ;;
     --help|-h) usage; exit 0 ;;
     *) fail "unknown option: $1" ;;
@@ -70,5 +67,4 @@ fi
 command -v tmux >/dev/null 2>&1 || fail "required command not found: tmux"
 tmux has-session -t "$MANAGER_SESSION" 2>/dev/null && run tmux kill-session -t "$MANAGER_SESSION" || true
 tmux has-session -t "$CLI_SESSION" 2>/dev/null && run tmux kill-session -t "$CLI_SESSION" || true
-tmux has-session -t "$LEGACY_KEEPER_SESSION" 2>/dev/null && run tmux kill-session -t "$LEGACY_KEEPER_SESSION" || true
-log "Stopped with tmux: $MANAGER_SESSION, $CLI_SESSION, $LEGACY_KEEPER_SESSION (legacy)"
+log "Stopped with tmux: $MANAGER_SESSION, $CLI_SESSION"
