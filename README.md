@@ -155,6 +155,15 @@ To install only and restart manually:
 ./restart.sh
 ```
 
+Aliyun OSS remains available as an optional mirror by passing `--bucket` and `--endpoint`:
+
+```bash
+./update.sh \
+  --tag v7.2.91.1 \
+  --bucket update-cpa-plus \
+  --endpoint oss-cn-shenzhen.aliyuncs.com
+```
+
 ## Amp CLI Support
 
 CLIProxyAPI Plus supports Amp CLI and Amp IDE extension route shapes:

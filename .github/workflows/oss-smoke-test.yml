@@ -1,0 +1,47 @@
+name: oss-smoke-test
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  smoke-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify Aliyun OSS secrets
+        shell: bash
+        env:
+          OSS_ACCESS_KEY_ID: ${{ secrets.ALIYUN_OSS_ACCESS_KEY_ID }}
+          OSS_ACCESS_KEY_SECRET: ${{ secrets.ALIYUN_OSS_ACCESS_KEY_SECRET }}
+          OSS_ENDPOINT: ${{ secrets.ALIYUN_OSS_ENDPOINT }}
+          OSS_BUCKET: ${{ secrets.ALIYUN_OSS_BUCKET }}
+          OSS_PREFIX: ${{ vars.ALIYUN_OSS_PREFIX }}
+        run: |
+          set -euo pipefail
+
+          test -n "${OSS_ACCESS_KEY_ID}" || { echo "ALIYUN_OSS_ACCESS_KEY_ID is empty"; exit 1; }
+          test -n "${OSS_ACCESS_KEY_SECRET}" || { echo "ALIYUN_OSS_ACCESS_KEY_SECRET is empty"; exit 1; }
+          test -n "${OSS_ENDPOINT}" || { echo "ALIYUN_OSS_ENDPOINT is empty"; exit 1; }
+          test -n "${OSS_BUCKET}" || { echo "ALIYUN_OSS_BUCKET is empty"; exit 1; }
+
+          go install github.com/aliyun/ossutil@v1.7.19
+          OSSUTIL="$(go env GOPATH)/bin/ossutil"
+
+          prefix="${OSS_PREFIX:-CLIProxyAPIPlus}"
+          prefix="${prefix#/}"
+          prefix="${prefix%/}"
+
+          mkdir -p /tmp/oss-smoke
+          printf 'oss smoke test: %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > /tmp/oss-smoke/source.txt
+
+          target="oss://${OSS_BUCKET}/${prefix}/_smoke/github-actions-oss-test.txt"
+          echo "Uploading ${target}"
+          "${OSSUTIL}" cp /tmp/oss-smoke/source.txt "${target}" -f -e "${OSS_ENDPOINT}" -i "${OSS_ACCESS_KEY_ID}" -k "${OSS_ACCESS_KEY_SECRET}"
+
+          echo "Downloading ${target}"
+          "${OSSUTIL}" cp "${target}" /tmp/oss-smoke/downloaded.txt -f -e "${OSS_ENDPOINT}" -i "${OSS_ACCESS_KEY_ID}" -k "${OSS_ACCESS_KEY_SECRET}"
+
+          cmp /tmp/oss-smoke/source.txt /tmp/oss-smoke/downloaded.txt
+          echo "Aliyun OSS smoke test passed."

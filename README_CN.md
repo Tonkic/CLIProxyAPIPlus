@@ -178,6 +178,15 @@ manager 的持久化文件位于 `manager/data/` 和 `manager/config.json`。建
 ./restart.sh
 ```
 
+阿里云 OSS 仍可作为可选镜像，显式传入 `--bucket` 和 `--endpoint` 即可：
+
+```bash
+./update.sh \
+  --tag v7.2.91.1 \
+  --bucket update-cpa-plus \
+  --endpoint oss-cn-shenzhen.aliyuncs.com
+```
+
 ## Amp CLI 支持
 
 常用 provider 路由：

@@ -143,6 +143,8 @@ Install only, then restart manually:
 ./restart.sh
 ```
 
+Aliyun OSS は optional mirror として引き続き利用できます。`--bucket` と `--endpoint` を指定してください。
+
 ## Amp CLI Support
 
 - `/api/provider/{provider}/v1/messages`
