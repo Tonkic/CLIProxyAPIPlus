@@ -8,6 +8,27 @@ import (
 	cliproxyauth "github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy/auth"
 )
 
+func TestEstimateTokensFromPayload(t *testing.T) {
+	tests := []struct {
+		name    string
+		payload []byte
+		want    int
+	}{
+		{name: "empty", payload: nil, want: 0},
+		{name: "short non-empty", payload: []byte("abc"), want: 1},
+		{name: "four bytes", payload: []byte("abcd"), want: 1},
+		{name: "multiple tokens", payload: []byte("abcdefghijkl"), want: 3},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := estimateTokensFromPayload(tt.payload); got != tt.want {
+				t.Fatalf("estimateTokensFromPayload() = %d, want %d", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestBuildKiroEndpointConfigs(t *testing.T) {
 	tests := []struct {
 		name           string

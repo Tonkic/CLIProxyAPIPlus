@@ -3579,10 +3579,7 @@ func (e *KiroExecutor) CountTokens(ctx context.Context, auth *cliproxyauth.Auth,
 	if err != nil {
 		log.Warnf("kiro: CountTokens failed to get tokenizer: %v, falling back to estimate", err)
 		// Fallback: estimate from payload size (roughly 4 chars per token)
-		estimatedTokens := len(req.Payload) / 4
-		if estimatedTokens == 0 && len(req.Payload) > 0 {
-			estimatedTokens = 1
-		}
+		estimatedTokens := estimateTokensFromPayload(req.Payload)
 		return cliproxyexecutor.Response{
 			Payload: []byte(fmt.Sprintf(`{"count":%d}`, estimatedTokens)),
 		}, nil
@@ -3602,10 +3599,7 @@ func (e *KiroExecutor) CountTokens(ctx context.Context, auth *cliproxyauth.Auth,
 			log.Debugf("kiro: CountTokens counted %d tokens from raw payload", totalTokens)
 		} else {
 			// Final fallback: estimate from payload size
-			totalTokens = int64(len(req.Payload) / 4)
-			if totalTokens == 0 && len(req.Payload) > 0 {
-				totalTokens = 1
-			}
+			totalTokens = int64(estimateTokensFromPayload(req.Payload))
 			log.Debugf("kiro: CountTokens estimated %d tokens from payload size", totalTokens)
 		}
 	}
@@ -3613,6 +3607,14 @@ func (e *KiroExecutor) CountTokens(ctx context.Context, auth *cliproxyauth.Auth,
 	return cliproxyexecutor.Response{
 		Payload: []byte(fmt.Sprintf(`{"count":%d}`, totalTokens)),
 	}, nil
+}
+
+func estimateTokensFromPayload(payload []byte) int {
+	estimated := len(payload) / 4
+	if estimated == 0 && len(payload) > 0 {
+		return 1
+	}
+	return estimated
 }
 
 // Refresh refreshes the Kiro OAuth token.
