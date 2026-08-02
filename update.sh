@@ -3,10 +3,6 @@ set -eu
 
 TAG=${UPDATE_TAG:-}
 REPOSITORY=${UPDATE_REPOSITORY:-Tonkic/CLIProxyAPIPlus}
-BUCKET=${ALIYUN_OSS_BUCKET:-}
-PREFIX=${ALIYUN_OSS_PREFIX:-CLIProxyAPIPlus}
-ENDPOINT=${ALIYUN_OSS_ENDPOINT:-}
-OSSUTIL=${OSSUTIL_BIN:-ossutil}
 ARCHIVE=${UPDATE_ARCHIVE:-}
 CHECKSUMS=${UPDATE_CHECKSUMS:-}
 ROOT=""
@@ -32,9 +28,6 @@ Update CLIProxyAPI Plus and bundled CPA-Manager-Plus, then restart safely.
 Options:
   --tag VERSION             Release tag, for example v7.2.92.2.
   --repository OWNER/REPO   GitHub repository. Defaults to Tonkic/CLIProxyAPIPlus.
-  --bucket NAME             OSS bucket. Can also be set with ALIYUN_OSS_BUCKET.
-  --prefix PREFIX           OSS prefix. Defaults to CLIProxyAPIPlus.
-  --endpoint ENDPOINT       OSS endpoint. Can also be set with ALIYUN_OSS_ENDPOINT.
   --archive PATH            Local release archive instead of downloading.
   --checksums PATH          Local checksums.txt.
   --download-dir PATH       Download directory. Defaults to ROOT/.update/downloads/TAG.
@@ -58,7 +51,6 @@ run() { log "+ $*"; [ "$DRY_RUN" -eq 1 ] || "$@"; }
 need_cmd() { command -v "$1" >/dev/null 2>&1 || fail "required command not found: $1"; }
 script_dir() { CDPATH= cd -- "$(dirname -- "$0")" && pwd; }
 strip_v() { case "$1" in v*) printf '%s' "${1#v}" ;; *) printf '%s' "$1" ;; esac; }
-trim_slashes() { value=${1#/}; value=${value%/}; printf '%s' "$value"; }
 normalize_arch() {
   arch=$(uname -m)
   case "$arch" in
@@ -136,9 +128,6 @@ while [ "$#" -gt 0 ]; do
   case "$1" in
     --tag) [ "$#" -ge 2 ] || fail "$1 requires a value"; TAG=$2; shift 2 ;;
     --repository|--repo) [ "$#" -ge 2 ] || fail "$1 requires a value"; REPOSITORY=$2; shift 2 ;;
-    --bucket) [ "$#" -ge 2 ] || fail "$1 requires a value"; BUCKET=$2; shift 2 ;;
-    --prefix) [ "$#" -ge 2 ] || fail "$1 requires a value"; PREFIX=$2; shift 2 ;;
-    --endpoint) [ "$#" -ge 2 ] || fail "$1 requires a value"; ENDPOINT=$2; shift 2 ;;
     --archive) [ "$#" -ge 2 ] || fail "$1 requires a value"; ARCHIVE=$2; shift 2 ;;
     --checksums|--checksum) [ "$#" -ge 2 ] || fail "$1 requires a value"; CHECKSUMS=$2; shift 2 ;;
     --download-dir) [ "$#" -ge 2 ] || fail "$1 requires a value"; DOWNLOAD_DIR=$2; shift 2 ;;
@@ -180,23 +169,10 @@ if [ "$DRY_RUN" -eq 0 ]; then
 fi
 
 if [ ! -f "$ARCHIVE" ] || [ ! -f "$CHECKSUMS" ]; then
-  if [ -n "$BUCKET" ]; then
-    need_cmd "$OSSUTIL"
-    PREFIX=$(trim_slashes "$PREFIX")
-    if [ -n "$PREFIX" ]; then OSS_BASE="oss://${BUCKET}/${PREFIX}/${TAG}"; else OSS_BASE="oss://${BUCKET}/${TAG}"; fi
-    if [ -n "$ENDPOINT" ]; then
-      run "$OSSUTIL" cp "${OSS_BASE}/${ASSET}" "$ARCHIVE" -f -e "$ENDPOINT"
-      run "$OSSUTIL" cp "${OSS_BASE}/checksums.txt" "$CHECKSUMS" -f -e "$ENDPOINT"
-    else
-      run "$OSSUTIL" cp "${OSS_BASE}/${ASSET}" "$ARCHIVE" -f
-      run "$OSSUTIL" cp "${OSS_BASE}/checksums.txt" "$CHECKSUMS" -f
-    fi
-  else
-    need_cmd curl
-    RELEASE_BASE="https://github.com/${REPOSITORY}/releases/download/${TAG}"
-    run curl -fL --retry 5 --retry-delay 2 --retry-connrefused "${RELEASE_BASE}/${ASSET}" -o "$ARCHIVE"
-    run curl -fL --retry 5 --retry-delay 2 --retry-connrefused "${RELEASE_BASE}/checksums.txt" -o "$CHECKSUMS"
-  fi
+  need_cmd curl
+  RELEASE_BASE="https://github.com/${REPOSITORY}/releases/download/${TAG}"
+  run curl -fL --retry 5 --retry-delay 2 --retry-connrefused "${RELEASE_BASE}/${ASSET}" -o "$ARCHIVE"
+  run curl -fL --retry 5 --retry-delay 2 --retry-connrefused "${RELEASE_BASE}/checksums.txt" -o "$CHECKSUMS"
 fi
 
 log "Verifying checksum..."
