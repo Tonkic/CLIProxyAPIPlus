@@ -215,7 +215,7 @@ jobs:
           OSS_ACCESS_KEY_SECRET: ${{ secrets.ALIYUN_OSS_ACCESS_KEY_SECRET }}
           OSS_ENDPOINT: ${{ secrets.ALIYUN_OSS_ENDPOINT }}
           OSS_BUCKET: ${{ secrets.ALIYUN_OSS_BUCKET }}
-          OSS_PREFIX: ${{ vars.ALIYUN_OSS_PREFIX }}
+          OSS_PREFIX: ${{ secrets.ALIYUN_OSS_PREFIX || vars.ALIYUN_OSS_PREFIX }}
           OSS_KEEP_RELEASES: ${{ vars.ALIYUN_OSS_KEEP_RELEASES }}
         run: |
           set -euo pipefail
