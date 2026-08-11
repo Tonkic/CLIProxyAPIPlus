@@ -627,12 +627,16 @@ func evictOldestAntigravityReasoningReplayEntries(count int) {
 	type candidate struct {
 		key       string
 		timestamp time.Time
+		revision  uint64
 	}
 	candidates := make([]candidate, 0, len(antigravityReasoningReplayEntries))
 	for key, entry := range antigravityReasoningReplayEntries {
-		candidates = append(candidates, candidate{key: key, timestamp: entry.Timestamp})
+		candidates = append(candidates, candidate{key: key, timestamp: entry.Timestamp, revision: entry.Revision})
 	}
 	sort.Slice(candidates, func(i, j int) bool {
+		if candidates[i].timestamp.Equal(candidates[j].timestamp) {
+			return candidates[i].revision < candidates[j].revision
+		}
 		return candidates[i].timestamp.Before(candidates[j].timestamp)
 	})
 	if count > len(candidates) {
