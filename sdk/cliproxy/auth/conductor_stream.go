@@ -1,11 +1,13 @@
 package auth
 
 import (
+	"bytes"
 	"context"
 	"net/http"
 	"strings"
 
 	cliproxyexecutor "github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy/executor"
+	"github.com/tidwall/gjson"
 )
 
 func discardStreamChunks(ch <-chan cliproxyexecutor.StreamChunk) {
@@ -81,7 +83,44 @@ func validateStreamResult(result *cliproxyexecutor.StreamResult, err error) (*cl
 	return result, nil
 }
 
-func readStreamBootstrap(ctx context.Context, ch <-chan cliproxyexecutor.StreamChunk) ([]cliproxyexecutor.StreamChunk, bool, error) {
+func isCodexLifecycleBootstrapPayload(payload []byte) bool {
+	payload = bytes.TrimSpace(payload)
+	if len(payload) == 0 {
+		return false
+	}
+	if bytes.HasPrefix(payload, []byte("event:")) {
+		eventLine := payload[len("event:"):]
+		if lineEnd := bytes.IndexByte(eventLine, '\n'); lineEnd >= 0 {
+			eventLine = eventLine[:lineEnd]
+		}
+		eventType := strings.TrimSpace(string(eventLine))
+		return eventType == "response.created" || eventType == "response.in_progress"
+	}
+	if gjson.ValidBytes(payload) {
+		eventType := gjson.GetBytes(payload, "type").String()
+		return eventType == "response.created" || eventType == "response.in_progress"
+	}
+
+	foundEvent := false
+	for _, line := range bytes.Split(payload, []byte("\n")) {
+		line = bytes.TrimSpace(line)
+		if !bytes.HasPrefix(line, []byte("data:")) {
+			continue
+		}
+		data := bytes.TrimSpace(line[len("data:"):])
+		if !gjson.ValidBytes(data) {
+			return false
+		}
+		eventType := gjson.GetBytes(data, "type").String()
+		if eventType != "response.created" && eventType != "response.in_progress" {
+			return false
+		}
+		foundEvent = true
+	}
+	return foundEvent
+}
+
+func readStreamBootstrap(ctx context.Context, provider string, ch <-chan cliproxyexecutor.StreamChunk) ([]cliproxyexecutor.StreamChunk, bool, error) {
 	if ch == nil {
 		return nil, true, nil
 	}
@@ -107,7 +146,7 @@ func readStreamBootstrap(ctx context.Context, ch <-chan cliproxyexecutor.StreamC
 			return nil, false, chunk.Err
 		}
 		buffered = append(buffered, chunk)
-		if len(chunk.Payload) > 0 {
+		if len(chunk.Payload) > 0 && !(strings.EqualFold(provider, "codex") && isCodexLifecycleBootstrapPayload(chunk.Payload)) {
 			return buffered, false, nil
 		}
 	}
@@ -276,7 +315,7 @@ func (m *Manager) executeStreamWithModelPool(ctx context.Context, executor Provi
 			continue
 		}
 
-		buffered, closed, bootstrapErr := readStreamBootstrap(ctx, streamResult.Chunks)
+		buffered, closed, bootstrapErr := readStreamBootstrap(ctx, provider, streamResult.Chunks)
 		if bootstrapErr != nil {
 			if errCtx := ctx.Err(); errCtx != nil {
 				discardStreamChunks(streamResult.Chunks)
@@ -312,7 +351,7 @@ func (m *Manager) executeStreamWithModelPool(ctx context.Context, executor Provi
 						streamResult = &cliproxyexecutor.StreamResult{}
 					} else {
 						streamResult = retryStream
-						buffered, closed, bootstrapErr = readStreamBootstrap(ctx, streamResult.Chunks)
+						buffered, closed, bootstrapErr = readStreamBootstrap(ctx, provider, streamResult.Chunks)
 					}
 				}
 			}

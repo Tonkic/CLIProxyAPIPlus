@@ -172,6 +172,8 @@ func codexTerminalFailureStatus(body []byte) int {
 		return http.StatusNotFound
 	case errorType == "rate_limit_error", errorCode == "rate_limit_exceeded":
 		return http.StatusTooManyRequests
+	case errorCode == "server_is_overloaded", errorType == "service_unavailable_error":
+		return http.StatusServiceUnavailable
 	default:
 		return http.StatusBadGateway
 	}

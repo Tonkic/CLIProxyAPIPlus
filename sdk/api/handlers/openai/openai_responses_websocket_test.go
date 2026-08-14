@@ -9,6 +9,7 @@ import (
 	"maps"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"runtime"
 	"strconv"
 	"strings"
@@ -666,9 +667,10 @@ type websocketPinnedFailoverExecutor struct {
 }
 
 type websocketBootstrapFallbackExecutor struct {
-	mu       sync.Mutex
-	authIDs  []string
-	payloads map[string][][]byte
+	mu                    sync.Mutex
+	authIDs               []string
+	payloads              map[string][][]byte
+	codexLifecycleFailure bool
 }
 
 type websocketDirectCaptureExecutor struct {
@@ -700,7 +702,12 @@ func (e websocketPinnedFailoverStatusError) Error() string { return e.msg }
 
 func (e websocketPinnedFailoverStatusError) StatusCode() int { return e.status }
 
-func (e *websocketBootstrapFallbackExecutor) Identifier() string { return "test-provider" }
+func (e *websocketBootstrapFallbackExecutor) Identifier() string {
+	if e.codexLifecycleFailure {
+		return "codex"
+	}
+	return "test-provider"
+}
 
 func (e *websocketBootstrapFallbackExecutor) Execute(context.Context, *coreauth.Auth, coreexecutor.Request, coreexecutor.Options) (coreexecutor.Response, error) {
 	return coreexecutor.Response{}, errors.New("not implemented")
@@ -721,6 +728,19 @@ func (e *websocketBootstrapFallbackExecutor) ExecuteStream(_ context.Context, au
 	e.mu.Unlock()
 
 	chunks := make(chan coreexecutor.StreamChunk, 1)
+	if e.codexLifecycleFailure {
+		chunks := make(chan coreexecutor.StreamChunk, 4)
+		chunks <- coreexecutor.StreamChunk{Payload: []byte(`{"type":"response.created","response":{"id":"resp-` + authID + `"}}`)}
+		chunks <- coreexecutor.StreamChunk{Payload: []byte(`{"type":"response.in_progress","response":{"id":"resp-` + authID + `"}}`)}
+		if authID == "auth-a" {
+			chunks <- coreexecutor.StreamChunk{Err: websocketPinnedFailoverStatusError{status: http.StatusServiceUnavailable, msg: `{"error":{"code":"server_is_overloaded","type":"service_unavailable_error"}}`}}
+		} else {
+			chunks <- coreexecutor.StreamChunk{Payload: []byte(`{"type":"response.output_text.delta","delta":"ok"}`)}
+			chunks <- coreexecutor.StreamChunk{Payload: []byte(`{"type":"response.completed","response":{"id":"resp-auth-b","status":"completed","output":[]}}`)}
+		}
+		close(chunks)
+		return &coreexecutor.StreamResult{Chunks: chunks}, nil
+	}
 	if authID == "auth-ws" {
 		chunks <- coreexecutor.StreamChunk{Err: websocketPinnedFailoverStatusError{
 			status: http.StatusUpgradeRequired,
@@ -733,6 +753,63 @@ func (e *websocketBootstrapFallbackExecutor) ExecuteStream(_ context.Context, au
 	chunks <- coreexecutor.StreamChunk{Payload: []byte(`{"type":"response.completed","response":{"id":"resp-http","output":[{"type":"message","id":"out-http"}]}}`)}
 	close(chunks)
 	return &coreexecutor.StreamResult{Chunks: chunks}, nil
+}
+
+func TestResponsesWebsocketRetriesCodexFailureBeforeOutput(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+
+	selector := &orderedWebsocketSelector{order: []string{"auth-a", "auth-b"}}
+	executor := &websocketBootstrapFallbackExecutor{codexLifecycleFailure: true}
+	manager := coreauth.NewManager(nil, selector, nil)
+	manager.RegisterExecutor(executor)
+	for _, id := range []string{"auth-a", "auth-b"} {
+		auth := &coreauth.Auth{ID: id, Provider: "codex", Status: coreauth.StatusActive}
+		if _, err := manager.Register(context.Background(), auth); err != nil {
+			t.Fatalf("Register(%s): %v", id, err)
+		}
+		registry.GetGlobalRegistry().RegisterClient(id, "codex", []*registry.ModelInfo{{ID: "test-model"}})
+		t.Cleanup(func() { registry.GetGlobalRegistry().UnregisterClient(id) })
+	}
+
+	base := handlers.NewBaseAPIHandlers(&sdkconfig.SDKConfig{}, manager)
+	h := NewOpenAIResponsesAPIHandler(base)
+	router := gin.New()
+	router.GET("/v1/responses/ws", h.ResponsesWebsocket)
+	server := httptest.NewServer(router)
+	defer server.Close()
+
+	wsURL := "ws" + strings.TrimPrefix(server.URL, "http") + "/v1/responses/ws"
+	conn, _, errDial := websocket.DefaultDialer.Dial(wsURL, nil)
+	if errDial != nil {
+		t.Fatalf("dial websocket: %v", errDial)
+	}
+	defer conn.Close()
+	if errWrite := conn.WriteMessage(websocket.TextMessage, []byte(`{"type":"response.create","model":"test-model","input":[]}`)); errWrite != nil {
+		t.Fatalf("write websocket message: %v", errWrite)
+	}
+
+	var payloads [][]byte
+	for {
+		_, payload, errRead := conn.ReadMessage()
+		if errRead != nil {
+			t.Fatalf("read websocket message: %v", errRead)
+		}
+		payloads = append(payloads, bytes.Clone(payload))
+		if gjson.GetBytes(payload, "type").String() == wsEventTypeCompleted {
+			break
+		}
+	}
+	if got := executor.AuthIDs(); !reflect.DeepEqual(got, []string{"auth-a", "auth-b"}) {
+		t.Fatalf("selected auth IDs = %v, want [auth-a auth-b]", got)
+	}
+	for _, payload := range payloads {
+		if strings.Contains(string(payload), "resp-auth-a") {
+			t.Fatalf("failed credential event leaked to websocket client: %s", payload)
+		}
+	}
+	if len(payloads) != 4 || gjson.GetBytes(payloads[0], "response.id").String() != "resp-auth-b" {
+		t.Fatalf("websocket payloads = %q, want complete auth-b stream", payloads)
+	}
 }
 
 func (e *websocketBootstrapFallbackExecutor) Refresh(_ context.Context, auth *coreauth.Auth) (*coreauth.Auth, error) {
