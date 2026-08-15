@@ -4,7 +4,6 @@ on:
   workflow_dispatch:
 
 permissions:
-  actions: write
   contents: read
 
 jobs:
@@ -14,7 +13,7 @@ jobs:
       - name: Copy public OSS settings from secrets to repository variables
         shell: bash
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.OSS_VARIABLE_MIGRATION_TOKEN }}
           OSS_ENDPOINT: ${{ secrets.ALIYUN_OSS_ENDPOINT }}
           OSS_BUCKET: ${{ secrets.ALIYUN_OSS_BUCKET }}
           OSS_PREFIX: ${{ secrets.ALIYUN_OSS_PREFIX }}
