@@ -8,7 +8,12 @@ CHECKSUMS=${UPDATE_CHECKSUMS:-}
 BUCKET=${ALIYUN_OSS_BUCKET:-}
 PREFIX=${ALIYUN_OSS_PREFIX:-CLIProxyAPIPlus}
 ENDPOINT=${ALIYUN_OSS_ENDPOINT:-}
-OSSUTIL=${OSSUTIL_BIN:-ossutil}
+DEFAULT_OSS_BUCKET=''
+DEFAULT_OSS_ENDPOINT=''
+DEFAULT_OSS_PREFIX='CLIProxyAPIPlus'
+BUCKET=${BUCKET:-$DEFAULT_OSS_BUCKET}
+ENDPOINT=${ENDPOINT:-$DEFAULT_OSS_ENDPOINT}
+PREFIX=${PREFIX:-$DEFAULT_OSS_PREFIX}
 ROOT=""
 DOWNLOAD_DIR=""
 MODE=${RUN_MODE:-auto}
@@ -32,9 +37,9 @@ Update CLIProxyAPI Plus and bundled CPA-Manager-Plus, then restart safely.
 Options:
   --tag VERSION             Release tag, for example v7.2.92.2.
   --repository OWNER/REPO   GitHub repository. Defaults to Tonkic/CLIProxyAPIPlus.
-  --bucket NAME             OSS bucket. Can also be set with ALIYUN_OSS_BUCKET.
+  --bucket NAME             Public OSS bucket. Overrides the release default.
   --prefix PREFIX           OSS prefix. Defaults to CLIProxyAPIPlus.
-  --endpoint ENDPOINT       OSS endpoint. Can also be set with ALIYUN_OSS_ENDPOINT.
+  --endpoint ENDPOINT       Public OSS endpoint. Overrides the release default.
   --archive PATH            Local release archive instead of downloading.
   --checksums PATH          Local checksums.txt.
   --download-dir PATH       Download directory. Defaults to ROOT/.update/downloads/TAG.
@@ -180,23 +185,38 @@ if [ "$DRY_RUN" -eq 0 ]; then
 fi
 
 if [ ! -f "$ARCHIVE" ] || [ ! -f "$CHECKSUMS" ]; then
-  if [ -n "$BUCKET" ]; then
-    need_cmd "$OSSUTIL"
+  need_cmd curl
+  download_base=""
+  if [ -n "$BUCKET" ] && [ -n "$ENDPOINT" ]; then
     PREFIX=$(trim_slashes "$PREFIX")
+    endpoint_host=${ENDPOINT#http://}
+    endpoint_host=${endpoint_host#https://}
+    endpoint_host=${endpoint_host%/}
+    case "$endpoint_host" in
+      "$BUCKET".*) oss_host=$endpoint_host ;;
+      *) oss_host="${BUCKET}.${endpoint_host}" ;;
+    esac
     if [ -n "$PREFIX" ]; then
-      OSS_BASE="oss://${BUCKET}/${PREFIX}/${TAG}"
+      download_base="https://${oss_host}/${PREFIX}/${TAG}"
     else
-      OSS_BASE="oss://${BUCKET}/${TAG}"
+      download_base="https://${oss_host}/${TAG}"
     fi
-    if [ -n "$ENDPOINT" ]; then
-      run "$OSSUTIL" cp "${OSS_BASE}/${ASSET}" "$ARCHIVE" -f -e "$ENDPOINT"
-      run "$OSSUTIL" cp "${OSS_BASE}/checksums.txt" "$CHECKSUMS" -f -e "$ENDPOINT"
+    log "Trying OSS mirror: ${download_base}"
+    if [ "$DRY_RUN" -eq 1 ]; then
+      run curl -fL --retry 3 --retry-delay 1 --retry-connrefused "${download_base}/${ASSET}" -o "$ARCHIVE"
+      run curl -fL --retry 3 --retry-delay 1 --retry-connrefused "${download_base}/checksums.txt" -o "$CHECKSUMS"
+      exit 0
+    fi
+    if curl -fL --retry 3 --retry-delay 1 --retry-connrefused "${download_base}/${ASSET}" -o "$ARCHIVE" &&
+       curl -fL --retry 3 --retry-delay 1 --retry-connrefused "${download_base}/checksums.txt" -o "$CHECKSUMS"; then
+      log "Downloaded release from OSS mirror."
     else
-      run "$OSSUTIL" cp "${OSS_BASE}/${ASSET}" "$ARCHIVE" -f
-      run "$OSSUTIL" cp "${OSS_BASE}/checksums.txt" "$CHECKSUMS" -f
+      log "OSS mirror download failed; falling back to GitHub Releases."
+      rm -f "$ARCHIVE" "$CHECKSUMS"
+      download_base=""
     fi
-  else
-    need_cmd curl
+  fi
+  if [ -z "$download_base" ]; then
     RELEASE_BASE="https://github.com/${REPOSITORY}/releases/download/${TAG}"
     run curl -fL --retry 5 --retry-delay 2 --retry-connrefused "${RELEASE_BASE}/${ASSET}" -o "$ARCHIVE"
     run curl -fL --retry 5 --retry-delay 2 --retry-connrefused "${RELEASE_BASE}/checksums.txt" -o "$CHECKSUMS"

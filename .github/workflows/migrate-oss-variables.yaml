@@ -1,0 +1,29 @@
+name: migrate-oss-variables
+
+on:
+  workflow_dispatch:
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Copy public OSS settings from secrets to repository variables
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OSS_ENDPOINT: ${{ secrets.ALIYUN_OSS_ENDPOINT }}
+          OSS_BUCKET: ${{ secrets.ALIYUN_OSS_BUCKET }}
+          OSS_PREFIX: ${{ secrets.ALIYUN_OSS_PREFIX }}
+        run: |
+          set -euo pipefail
+          if [ -z "${OSS_ENDPOINT}" ] || [ -z "${OSS_BUCKET}" ]; then
+            echo "ALIYUN_OSS_ENDPOINT and ALIYUN_OSS_BUCKET secrets must be configured." >&2
+            exit 1
+          fi
+          gh variable set ALIYUN_OSS_ENDPOINT --repo "${GITHUB_REPOSITORY}" --body "${OSS_ENDPOINT}"
+          gh variable set ALIYUN_OSS_BUCKET --repo "${GITHUB_REPOSITORY}" --body "${OSS_BUCKET}"
+          gh variable set ALIYUN_OSS_PREFIX --repo "${GITHUB_REPOSITORY}" --body "${OSS_PREFIX:-CLIProxyAPIPlus}"

@@ -169,6 +169,7 @@ jobs:
             printf '%s\n' "${release_assets}" | grep -Fx "${asset}" >/dev/null
             curl -fL --retry 5 --retry-delay 2 --retry-connrefused "${base_url}/${asset}" -o "/tmp/manager/${asset}"
           done
+
           for target in linux_amd64 linux_arm64; do
             workdir="/tmp/manager/${target}"
             mkdir -p "${workdir}"
@@ -189,6 +190,34 @@ jobs:
             arch=${target#*_}
             cp "${manager_bin}" ".manager-dist/${os}/${arch}/manager/cpa-manager-plus.exe"
           done
+
+      - name: Embed public OSS mirror defaults in updater
+        shell: bash
+        env:
+          OSS_ENDPOINT: ${{ vars.ALIYUN_OSS_ENDPOINT || secrets.ALIYUN_OSS_ENDPOINT }}
+          OSS_BUCKET: ${{ vars.ALIYUN_OSS_BUCKET || secrets.ALIYUN_OSS_BUCKET }}
+          OSS_PREFIX: ${{ vars.ALIYUN_OSS_PREFIX || secrets.ALIYUN_OSS_PREFIX }}
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import os
+          import pathlib
+          import shlex
+
+          path = pathlib.Path("update.sh")
+          text = path.read_text(encoding="utf-8")
+          values = {
+              "DEFAULT_OSS_BUCKET=''": os.environ.get("OSS_BUCKET", ""),
+              "DEFAULT_OSS_ENDPOINT=''": os.environ.get("OSS_ENDPOINT", ""),
+              "DEFAULT_OSS_PREFIX='CLIProxyAPIPlus'": os.environ.get("OSS_PREFIX") or "CLIProxyAPIPlus",
+          }
+          for marker, value in values.items():
+              replacement = marker.split("=", 1)[0] + "=" + shlex.quote(value)
+              if text.count(marker) != 1:
+                  raise SystemExit(f"updater marker not found exactly once: {marker}")
+              text = text.replace(marker, replacement)
+          path.write_text(text, encoding="utf-8")
+          PY
 
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6
@@ -213,9 +242,9 @@ jobs:
         env:
           OSS_ACCESS_KEY_ID: ${{ secrets.ALIYUN_OSS_ACCESS_KEY_ID }}
           OSS_ACCESS_KEY_SECRET: ${{ secrets.ALIYUN_OSS_ACCESS_KEY_SECRET }}
-          OSS_ENDPOINT: ${{ secrets.ALIYUN_OSS_ENDPOINT }}
-          OSS_BUCKET: ${{ secrets.ALIYUN_OSS_BUCKET }}
-          OSS_PREFIX: ${{ secrets.ALIYUN_OSS_PREFIX || vars.ALIYUN_OSS_PREFIX }}
+          OSS_ENDPOINT: ${{ vars.ALIYUN_OSS_ENDPOINT || secrets.ALIYUN_OSS_ENDPOINT }}
+          OSS_BUCKET: ${{ vars.ALIYUN_OSS_BUCKET || secrets.ALIYUN_OSS_BUCKET }}
+          OSS_PREFIX: ${{ vars.ALIYUN_OSS_PREFIX || secrets.ALIYUN_OSS_PREFIX }}
           OSS_KEEP_RELEASES: ${{ vars.ALIYUN_OSS_KEEP_RELEASES }}
         run: |
           set -euo pipefail
