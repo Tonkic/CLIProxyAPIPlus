@@ -14,6 +14,7 @@ DEFAULT_OSS_PREFIX='CLIProxyAPIPlus'
 BUCKET=${BUCKET:-$DEFAULT_OSS_BUCKET}
 ENDPOINT=${ENDPOINT:-$DEFAULT_OSS_ENDPOINT}
 PREFIX=${PREFIX:-$DEFAULT_OSS_PREFIX}
+OSSUTIL=${OSSUTIL_BIN:-ossutil}
 ROOT=""
 DOWNLOAD_DIR=""
 MODE=${RUN_MODE:-auto}
@@ -37,9 +38,9 @@ Update CLIProxyAPI Plus and bundled CPA-Manager-Plus, then restart safely.
 Options:
   --tag VERSION             Release tag, for example v7.2.92.2.
   --repository OWNER/REPO   GitHub repository. Defaults to Tonkic/CLIProxyAPIPlus.
-  --bucket NAME             Public OSS bucket. Overrides the release default.
+  --bucket NAME             OSS mirror bucket. Overrides the release default.
   --prefix PREFIX           OSS prefix. Defaults to CLIProxyAPIPlus.
-  --endpoint ENDPOINT       Public OSS endpoint. Overrides the release default.
+  --endpoint ENDPOINT       OSS mirror endpoint. Overrides the release default.
   --archive PATH            Local release archive instead of downloading.
   --checksums PATH          Local checksums.txt.
   --download-dir PATH       Download directory. Defaults to ROOT/.update/downloads/TAG.
@@ -186,37 +187,60 @@ fi
 
 if [ ! -f "$ARCHIVE" ] || [ ! -f "$CHECKSUMS" ]; then
   need_cmd curl
-  download_base=""
+  downloaded=0
   if [ -n "$BUCKET" ] && [ -n "$ENDPOINT" ]; then
     PREFIX=$(trim_slashes "$PREFIX")
-    endpoint_host=${ENDPOINT#http://}
-    endpoint_host=${endpoint_host#https://}
-    endpoint_host=${endpoint_host%/}
-    case "$endpoint_host" in
-      "$BUCKET".*) oss_host=$endpoint_host ;;
-      *) oss_host="${BUCKET}.${endpoint_host}" ;;
-    esac
     if [ -n "$PREFIX" ]; then
-      download_base="https://${oss_host}/${PREFIX}/${TAG}"
+      oss_base="oss://${BUCKET}/${PREFIX}/${TAG}"
     else
-      download_base="https://${oss_host}/${TAG}"
+      oss_base="oss://${BUCKET}/${TAG}"
     fi
-    log "Trying OSS mirror: ${download_base}"
-    if [ "$DRY_RUN" -eq 1 ]; then
-      run curl -fL --retry 3 --retry-delay 1 --retry-connrefused "${download_base}/${ASSET}" -o "$ARCHIVE"
-      run curl -fL --retry 3 --retry-delay 1 --retry-connrefused "${download_base}/checksums.txt" -o "$CHECKSUMS"
-      exit 0
+    if command -v "$OSSUTIL" >/dev/null 2>&1; then
+      log "Trying authenticated OSS mirror: ${oss_base}"
+      if [ "$DRY_RUN" -eq 1 ]; then
+        run "$OSSUTIL" cp "${oss_base}/${ASSET}" "$ARCHIVE" -f -e "$ENDPOINT"
+        run "$OSSUTIL" cp "${oss_base}/checksums.txt" "$CHECKSUMS" -f -e "$ENDPOINT"
+        exit 0
+      fi
+      if "$OSSUTIL" cp "${oss_base}/${ASSET}" "$ARCHIVE" -f -e "$ENDPOINT" &&
+         "$OSSUTIL" cp "${oss_base}/checksums.txt" "$CHECKSUMS" -f -e "$ENDPOINT"; then
+        log "Downloaded release from authenticated OSS mirror."
+        downloaded=1
+      else
+        log "Authenticated OSS mirror download failed; trying public HTTPS."
+        rm -f "$ARCHIVE" "$CHECKSUMS"
+      fi
     fi
-    if curl -fL --retry 3 --retry-delay 1 --retry-connrefused "${download_base}/${ASSET}" -o "$ARCHIVE" &&
-       curl -fL --retry 3 --retry-delay 1 --retry-connrefused "${download_base}/checksums.txt" -o "$CHECKSUMS"; then
-      log "Downloaded release from OSS mirror."
-    else
-      log "OSS mirror download failed; falling back to GitHub Releases."
-      rm -f "$ARCHIVE" "$CHECKSUMS"
-      download_base=""
+    if [ "$downloaded" -eq 0 ]; then
+      endpoint_host=${ENDPOINT#http://}
+      endpoint_host=${endpoint_host#https://}
+      endpoint_host=${endpoint_host%/}
+      case "$endpoint_host" in
+        "$BUCKET".*) oss_host=$endpoint_host ;;
+        *) oss_host="${BUCKET}.${endpoint_host}" ;;
+      esac
+      if [ -n "$PREFIX" ]; then
+        https_base="https://${oss_host}/${PREFIX}/${TAG}"
+      else
+        https_base="https://${oss_host}/${TAG}"
+      fi
+      log "Trying public OSS mirror: ${https_base}"
+      if [ "$DRY_RUN" -eq 1 ]; then
+        run curl -fL --retry 3 --retry-delay 1 --retry-connrefused "${https_base}/${ASSET}" -o "$ARCHIVE"
+        run curl -fL --retry 3 --retry-delay 1 --retry-connrefused "${https_base}/checksums.txt" -o "$CHECKSUMS"
+        exit 0
+      fi
+      if curl -fL --retry 3 --retry-delay 1 --retry-connrefused "${https_base}/${ASSET}" -o "$ARCHIVE" &&
+         curl -fL --retry 3 --retry-delay 1 --retry-connrefused "${https_base}/checksums.txt" -o "$CHECKSUMS"; then
+        log "Downloaded release from public OSS mirror."
+        downloaded=1
+      else
+        log "OSS mirror download failed; falling back to GitHub Releases."
+        rm -f "$ARCHIVE" "$CHECKSUMS"
+      fi
     fi
   fi
-  if [ -z "$download_base" ]; then
+  if [ "$downloaded" -eq 0 ]; then
     RELEASE_BASE="https://github.com/${REPOSITORY}/releases/download/${TAG}"
     run curl -fL --retry 5 --retry-delay 2 --retry-connrefused "${RELEASE_BASE}/${ASSET}" -o "$ARCHIVE"
     run curl -fL --retry 5 --retry-delay 2 --retry-connrefused "${RELEASE_BASE}/checksums.txt" -o "$CHECKSUMS"
