@@ -263,10 +263,10 @@ jobs:
           target="oss://${OSS_BUCKET}/${prefix}/${VERSION}"
 
           echo "Uploading release assets to ${target}/"
-          "${OSSUTIL}" cp update.sh "${target}/update.sh" -f -e "${OSS_ENDPOINT}" -i "${OSS_ACCESS_KEY_ID}" -k "${OSS_ACCESS_KEY_SECRET}"
+          "${OSSUTIL}" cp update.sh "${target}/update.sh" -f --acl public-read -e "${OSS_ENDPOINT}" -i "${OSS_ACCESS_KEY_ID}" -k "${OSS_ACCESS_KEY_SECRET}"
           while IFS= read -r file; do
             name="$(basename "${file}")"
-            "${OSSUTIL}" cp "${file}" "${target}/${name}" -f -e "${OSS_ENDPOINT}" -i "${OSS_ACCESS_KEY_ID}" -k "${OSS_ACCESS_KEY_SECRET}"
+            "${OSSUTIL}" cp "${file}" "${target}/${name}" -f --acl public-read -e "${OSS_ENDPOINT}" -i "${OSS_ACCESS_KEY_ID}" -k "${OSS_ACCESS_KEY_SECRET}"
           done < <(find dist -maxdepth 1 -type f \( -name '*.tar.gz' -o -name '*.zip' -o -name 'checksums.txt' \) | sort)
 
           keep_releases="${OSS_KEEP_RELEASES:-3}"
