@@ -94,7 +94,7 @@ func isCodexLifecycleBootstrapPayload(payload []byte) bool {
 			eventLine = eventLine[:lineEnd]
 		}
 		eventType := strings.TrimSpace(string(eventLine))
-		return eventType == "response.created" || eventType == "response.in_progress"
+		return eventType == "response.created" || eventType == "response.in_progress" || eventType == "error" || eventType == "response.failed"
 	}
 	if gjson.ValidBytes(payload) {
 		eventType := gjson.GetBytes(payload, "type").String()

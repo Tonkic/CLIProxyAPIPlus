@@ -464,46 +464,77 @@ func TestCodexExecutorExecuteStreamIgnoresTransportErrorAfterCompletion(t *testi
 }
 
 func TestCodexExecutorExecuteStreamSurfacesTerminalStreamError(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "text/event-stream")
-		_, _ = w.Write([]byte("event: response.created\n"))
-		_, _ = w.Write([]byte(`data: {"type":"response.created","response":{"id":"resp_1","model":"gpt-5.5"}}` + "\n\n"))
-		_, _ = w.Write([]byte("event: error\n"))
-		_, _ = w.Write([]byte(`data: {"type":"error","error":{"type":"invalid_request_error","code":"context_length_exceeded","message":"Your input exceeds the context window of this model. Please adjust your input and try again.","param":"input"},"sequence_number":2}` + "\n\n"))
-	}))
-	defer server.Close()
+	tests := []struct {
+		name       string
+		eventType  string
+		data       string
+		wantStatus int
+	}{
+		{
+			name:       "error context length",
+			eventType:  "error",
+			data:       `{"type":"error","error":{"type":"invalid_request_error","code":"context_length_exceeded","message":"Your input exceeds the context window of this model. Please adjust your input and try again.","param":"input"},"sequence_number":2}`,
+			wantStatus: http.StatusBadRequest,
+		},
+		{
+			name:       "error service unavailable",
+			eventType:  "error",
+			data:       `{"type":"error","error":{"type":"service_unavailable_error","message":"Service unavailable."}}`,
+			wantStatus: http.StatusServiceUnavailable,
+		},
+		{
+			name:       "response failed service unavailable",
+			eventType:  "response.failed",
+			data:       `{"type":"response.failed","response":{"id":"resp_1","status":"failed","error":{"type":"service_unavailable_error","message":"Service unavailable."}}}`,
+			wantStatus: http.StatusServiceUnavailable,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "text/event-stream")
+				_, _ = w.Write([]byte("event: response.created\n"))
+				_, _ = w.Write([]byte(`data: {"type":"response.created","response":{"id":"resp_1","model":"gpt-5.5"}}` + "\n\n"))
+				_, _ = w.Write([]byte("event: " + tt.eventType + "\n"))
+				_, _ = w.Write([]byte("data: " + tt.data + "\n\n"))
+			}))
+			defer server.Close()
 
-	executor := NewCodexExecutor(&config.Config{})
-	auth := &cliproxyauth.Auth{Attributes: map[string]string{
-		"base_url": server.URL,
-		"api_key":  "test",
-	}}
+			executor := NewCodexExecutor(&config.Config{})
+			auth := &cliproxyauth.Auth{Attributes: map[string]string{
+				"base_url": server.URL,
+				"api_key":  "test",
+			}}
 
-	result, err := executor.ExecuteStream(context.Background(), auth, cliproxyexecutor.Request{
-		Model:   "gpt-5.5",
-		Payload: []byte(`{"model":"gpt-5.5","input":"hello"}`),
-	}, cliproxyexecutor.Options{
-		SourceFormat: sdktranslator.FromString("openai-response"),
-		Stream:       true,
-	})
-	if err != nil {
-		t.Fatalf("ExecuteStream error: %v", err)
-	}
+			result, err := executor.ExecuteStream(context.Background(), auth, cliproxyexecutor.Request{
+				Model:   "gpt-5.5",
+				Payload: []byte(`{"model":"gpt-5.5","input":"hello"}`),
+			}, cliproxyexecutor.Options{
+				SourceFormat: sdktranslator.FromString("openai-response"),
+				Stream:       true,
+			})
+			if err != nil {
+				t.Fatalf("ExecuteStream error: %v", err)
+			}
 
-	var streamErr error
-	for chunk := range result.Chunks {
-		if chunk.Err != nil {
-			streamErr = chunk.Err
-			break
-		}
+			var streamErr error
+			for chunk := range result.Chunks {
+				if chunk.Err != nil {
+					streamErr = chunk.Err
+					break
+				}
+			}
+			if streamErr == nil {
+				t.Fatal("missing stream terminal error")
+			}
+			if got := statusCodeFromTestError(t, streamErr); got != tt.wantStatus {
+				t.Fatalf("status code = %d, want %d; err=%v", got, tt.wantStatus, streamErr)
+			}
+			if tt.wantStatus == http.StatusBadRequest {
+				assertCodexErrorCode(t, streamErr.Error(), "invalid_request_error", "context_too_large")
+			}
+		})
 	}
-	if streamErr == nil {
-		t.Fatal("missing stream terminal error")
-	}
-	if got := statusCodeFromTestError(t, streamErr); got != http.StatusBadRequest {
-		t.Fatalf("status code = %d, want %d; err=%v", got, http.StatusBadRequest, streamErr)
-	}
-	assertCodexErrorCode(t, streamErr.Error(), "invalid_request_error", "context_too_large")
 }
 
 func TestCodexTerminalStreamContextLengthErrFromResponseFailed(t *testing.T) {

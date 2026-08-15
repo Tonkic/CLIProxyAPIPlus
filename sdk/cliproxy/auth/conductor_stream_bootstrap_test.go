@@ -15,6 +15,7 @@ type codexLifecycleBootstrapExecutor struct {
 	mu              sync.Mutex
 	calls           []string
 	failAfterOutput bool
+	failEvent       string
 }
 
 func (*codexLifecycleBootstrapExecutor) Identifier() string { return "codex" }
@@ -37,6 +38,9 @@ func (e *codexLifecycleBootstrapExecutor) ExecuteStream(_ context.Context, auth 
 		if e.failAfterOutput {
 			chunks <- cliproxyexecutor.StreamChunk{Payload: []byte("event: response.output_text.delta\n")}
 			chunks <- cliproxyexecutor.StreamChunk{Payload: []byte("data: {\"type\":\"response.output_text.delta\",\"delta\":\"partial\"}\n\n")}
+		}
+		if e.failEvent != "" {
+			chunks <- cliproxyexecutor.StreamChunk{Payload: []byte("event: " + e.failEvent + "\n")}
 		}
 		chunks <- cliproxyexecutor.StreamChunk{Err: &Error{HTTPStatus: http.StatusServiceUnavailable, Message: `{"error":{"code":"server_is_overloaded","type":"service_unavailable_error"}}`}}
 	} else {
@@ -116,6 +120,8 @@ func TestCodexLifecycleBootstrapPayloadRecognizesSSEFraming(t *testing.T) {
 	for _, payload := range [][]byte{
 		[]byte("event: response.created\n"),
 		[]byte("event: response.in_progress\r\n"),
+		[]byte("event: error\n"),
+		[]byte("event: response.failed\r\n"),
 		[]byte("event: response.created\ndata: {\"type\":\"response.created\"}\n\n"),
 		[]byte("data: {\"type\":\"response.in_progress\"}\n\n"),
 	} {
@@ -130,6 +136,44 @@ func TestCodexLifecycleBootstrapPayloadRecognizesSSEFraming(t *testing.T) {
 		if isCodexLifecycleBootstrapPayload(payload) {
 			t.Fatalf("real output misclassified as lifecycle bootstrap: %q", payload)
 		}
+	}
+}
+
+func TestManagerExecuteStreamRetriesCodexFailureAfterSplitTerminalEvent(t *testing.T) {
+	for _, eventType := range []string{"error", "response.failed"} {
+		t.Run(eventType, func(t *testing.T) {
+			executor := &codexLifecycleBootstrapExecutor{failEvent: eventType}
+			manager := NewManager(nil, nil, nil)
+			manager.RegisterExecutor(executor)
+			for _, id := range []string{"auth-a", "auth-b"} {
+				if _, err := manager.Register(context.Background(), &Auth{ID: id, Provider: "codex", Status: StatusActive}); err != nil {
+					t.Fatalf("Register(%s): %v", id, err)
+				}
+				registry.GetGlobalRegistry().RegisterClient(id, "codex", []*registry.ModelInfo{{ID: "gpt-test"}})
+				t.Cleanup(func() { registry.GetGlobalRegistry().UnregisterClient(id) })
+			}
+
+			result, err := manager.ExecuteStream(context.Background(), []string{"codex"}, cliproxyexecutor.Request{Model: "gpt-test"}, cliproxyexecutor.Options{Stream: true})
+			if err != nil {
+				t.Fatalf("ExecuteStream(): %v", err)
+			}
+			var payloads []string
+			for chunk := range result.Chunks {
+				if chunk.Err != nil {
+					t.Fatalf("unexpected stream error: %v", chunk.Err)
+				}
+				payloads = append(payloads, string(chunk.Payload))
+			}
+
+			if got := executor.Calls(); !reflect.DeepEqual(got, []string{"auth-a", "auth-b"}) {
+				t.Fatalf("credential attempts = %v, want [auth-a auth-b]", got)
+			}
+			for _, payload := range payloads {
+				if payload == "event: "+eventType+"\n" {
+					t.Fatalf("failed credential terminal event leaked to client: %q", payload)
+				}
+			}
+		})
 	}
 }
 
