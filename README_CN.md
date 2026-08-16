@@ -119,16 +119,18 @@ api-key-auth-bindings:
 
 release 包包含简短的 Linux 辅助脚本和 CPA-Manager-Plus 二进制：
 
-Windows ZIP 包含 `start.cmd`、`stop.cmd`、`restart.cmd` 和 `update.cmd`，底层脚本兼容 Windows PowerShell 5.1。将 `config.example.yaml` 复制为 `config.yaml` 后，可运行 `.\start.cmd`、`.\restart.cmd`、`.\stop.cmd` 或 `.\update.cmd -Tag v7.2.132.4`。PID 文件保存在 `.runtime\`，日志保存在 `logs\`。若已安装并配置 `ossutil`，更新器会优先使用已认证的私有 OSS，然后依次回退到 OSS HTTPS 和 GitHub Releases。
+Windows ZIP 根目录只保留 `start.cmd`，完整运维脚本位于 `windows\`。将 `config.example.yaml` 复制为 `config.yaml` 后，可运行 `.\start.cmd`、`.\windows\restart.cmd`、`.\windows\stop.cmd` 或 `.\windows\update.cmd -Tag v7.2.132.5`。Linux 包同样只在根目录保留 `start.sh`，其余脚本位于 `linux/`。
 
 ```text
 CLIProxyAPIPlus_<version>_linux_<arch>/
 |-- cli-proxy-api-plus
 |-- config.example.yaml
 |-- start.sh
-|-- stop.sh
-|-- restart.sh
-|-- update.sh
+|-- linux/
+|   |-- start.sh
+|   |-- stop.sh
+|   |-- restart.sh
+|   `-- update.sh
 `-- manager/
     `-- cpa-manager-plus
 ```
@@ -144,8 +146,8 @@ cp config.example.yaml config.yaml
 
 ```bash
 ./start.sh
-./stop.sh
-./restart.sh
+./linux/stop.sh
+./linux/restart.sh
 ```
 
 脚本会启动：
@@ -167,23 +169,23 @@ manager 的持久化文件位于 `manager/data/` 和 `manager/config.json`。建
 默认直接从 GitHub Release 下载：
 
 ```bash
-./update.sh --tag v7.2.91.1
+./linux/update.sh --tag v7.2.91.1
 ```
 
 只更新不重启，然后手动重启：
 
 ```bash
-./update.sh \
+./linux/update.sh \
   --tag v7.2.91.1 \
   --no-restart
 
-./restart.sh
+./linux/restart.sh
 ```
 
 阿里云 OSS 仍可作为可选镜像，显式传入 `--bucket` 和 `--endpoint` 即可：
 
 ```bash
-./update.sh \
+./linux/update.sh \
   --tag v7.2.91.1 \
   --bucket update-cpa-plus \
   --endpoint oss-cn-shenzhen.aliyuncs.com

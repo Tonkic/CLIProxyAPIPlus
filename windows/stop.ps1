@@ -1,5 +1,5 @@
 [CmdletBinding()]
-param([string]$Root = $PSScriptRoot, [int]$Timeout = 15)
+param([string]$Root = (Split-Path -Parent $PSScriptRoot), [int]$Timeout = 15)
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'windows-common.ps1')
 $paths = Get-CpaPaths $Root

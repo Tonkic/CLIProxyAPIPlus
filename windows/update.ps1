@@ -2,7 +2,7 @@
 param(
     [Parameter(Mandatory = $true)][string]$Tag,
     [string]$Repository = 'Tonkic/CLIProxyAPIPlus',
-    [string]$Root = $PSScriptRoot,
+    [string]$Root = (Split-Path -Parent $PSScriptRoot),
     [string]$Bucket = '',
     [string]$Prefix = '',
     [string]$Endpoint = '',
@@ -82,27 +82,29 @@ try {
     if (Test-Path $paths.CpaExe) { Copy-Item $paths.CpaExe (Join-Path $backup 'cli-proxy-api-plus.exe') }
     if (Test-Path $paths.ManagerExe) { Copy-Item $paths.ManagerExe (Join-Path $backup 'manager\cpa-manager-plus.exe') }
     foreach ($name in @('windows-common.ps1','start.ps1','stop.ps1','restart.ps1','update.ps1','start.cmd','stop.cmd','restart.cmd','update.cmd')) {
-        $current = Join-Path $paths.Root $name
+        $current = Join-Path $paths.Root "windows\$name"
         if (Test-Path $current) { Copy-Item $current (Join-Path $backup $name) }
     }
     Copy-Item $newCpa[0].FullName $paths.CpaExe -Force
     New-Item -ItemType Directory -Force -Path (Split-Path $paths.ManagerExe) | Out-Null
     Copy-Item $newManager[0].FullName $paths.ManagerExe -Force
     foreach ($name in @('windows-common.ps1','start.ps1','stop.ps1','restart.ps1','update.ps1','start.cmd','stop.cmd','restart.cmd','update.cmd')) {
-        $source = Get-ChildItem -LiteralPath $staging -Recurse -File -Filter $name | Select-Object -First 1
-        if ($source) { Copy-Item $source.FullName (Join-Path $paths.Root $name) -Force }
+        $source = Join-Path $staging "windows\$name"
+        if (Test-Path $source) { Copy-Item $source (Join-Path $paths.Root "windows\$name") -Force }
     }
-    if (-not $NoRestart) { & (Join-Path $paths.Root 'start.ps1') -Root $paths.Root }
+    $rootStart = Get-ChildItem -LiteralPath $staging -File -Filter 'start.cmd' | Select-Object -First 1
+    if ($rootStart) { Copy-Item $rootStart.FullName (Join-Path $paths.Root 'start.cmd') -Force }
+    if (-not $NoRestart) { & (Join-Path $paths.Root 'windows\start.ps1') -Root $paths.Root }
     Write-Host "Updated to $Tag. Backup: $backup"
 } catch {
     if (Test-Path (Join-Path $backup 'cli-proxy-api-plus.exe')) { Copy-Item (Join-Path $backup 'cli-proxy-api-plus.exe') $paths.CpaExe -Force }
     if (Test-Path (Join-Path $backup 'manager\cpa-manager-plus.exe')) { Copy-Item (Join-Path $backup 'manager\cpa-manager-plus.exe') $paths.ManagerExe -Force }
     foreach ($name in @('windows-common.ps1','start.ps1','stop.ps1','restart.ps1','update.ps1','start.cmd','stop.cmd','restart.cmd','update.cmd')) {
         $saved = Join-Path $backup $name
-        if (Test-Path $saved) { Copy-Item $saved (Join-Path $paths.Root $name) -Force }
+        if (Test-Path $saved) { Copy-Item $saved (Join-Path $paths.Root "windows\$name") -Force }
     }
     if ($wasRunning -and -not $NoRestart) {
-        try { & (Join-Path $paths.Root 'start.ps1') -Root $paths.Root } catch { Write-Warning "Rollback restored the previous files, but restart failed: $_" }
+        try { & (Join-Path $paths.Root 'windows\start.ps1') -Root $paths.Root } catch { Write-Warning "Rollback restored the previous files, but restart failed: $_" }
     }
     throw
 } finally {

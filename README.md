@@ -96,16 +96,18 @@ Run the built binary:
 
 Release archives include short Linux helper scripts and the CPA-Manager-Plus binary:
 
-Windows ZIP archives include `start.cmd`, `stop.cmd`, `restart.cmd`, and `update.cmd` wrappers backed by PowerShell 5.1-compatible scripts. After copying `config.example.yaml` to `config.yaml`, run `.\start.cmd`, `.\restart.cmd`, `.\stop.cmd`, or `.\update.cmd -Tag v7.2.132.4`. PID files are stored under `.runtime\` and logs under `logs\`. The updater prefers authenticated private OSS when `ossutil` is configured, then falls back to HTTPS OSS and GitHub Releases.
+Windows ZIP archives keep `start.cmd` at the root and place all operational scripts under `windows\`. After copying `config.example.yaml` to `config.yaml`, run `.\start.cmd`, `.\windows\restart.cmd`, `.\windows\stop.cmd`, or `.\windows\update.cmd -Tag v7.2.132.5`. Linux archives likewise keep only `start.sh` at the root and place the full script set under `linux/`.
 
 ```text
 CLIProxyAPIPlus_<version>_linux_<arch>/
 |-- cli-proxy-api-plus
 |-- config.example.yaml
 |-- start.sh
-|-- stop.sh
-|-- restart.sh
-|-- update.sh
+|-- linux/
+|   |-- start.sh
+|   |-- stop.sh
+|   |-- restart.sh
+|   `-- update.sh
 `-- manager/
     `-- cpa-manager-plus
 ```
@@ -121,8 +123,8 @@ Service control:
 
 ```bash
 ./start.sh
-./stop.sh
-./restart.sh
+./linux/stop.sh
+./linux/restart.sh
 ```
 
 The helper starts:
@@ -144,23 +146,23 @@ The manager keeps persistent state in `manager/data/` and `manager/config.json`.
 GitHub Releases are the default download source:
 
 ```bash
-./update.sh --tag v7.2.91.1
+./linux/update.sh --tag v7.2.91.1
 ```
 
 To install only and restart manually:
 
 ```bash
-./update.sh \
+./linux/update.sh \
   --tag v7.2.91.1 \
   --no-restart
 
-./restart.sh
+./linux/restart.sh
 ```
 
 Aliyun OSS remains available as an optional mirror by passing `--bucket` and `--endpoint`:
 
 ```bash
-./update.sh \
+./linux/update.sh \
   --tag v7.2.91.1 \
   --bucket update-cpa-plus \
   --endpoint oss-cn-shenzhen.aliyuncs.com

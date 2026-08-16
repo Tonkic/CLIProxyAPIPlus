@@ -204,7 +204,7 @@ jobs:
           import pathlib
           import shlex
 
-          path = pathlib.Path("update.sh")
+          path = pathlib.Path("linux/update.sh")
           text = path.read_text(encoding="utf-8")
           values = {
               "DEFAULT_OSS_BUCKET=''": os.environ.get("OSS_BUCKET", ""),
@@ -235,7 +235,9 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "${VERSION}" update.sh --repo "${GITHUB_REPOSITORY}" --clobber
+        run: |
+          cp linux/update.sh /tmp/update.sh
+          gh release upload "${VERSION}" /tmp/update.sh --repo "${GITHUB_REPOSITORY}" --clobber
 
       - name: Sync release assets to Aliyun OSS
         shell: bash
@@ -263,7 +265,7 @@ jobs:
           target="oss://${OSS_BUCKET}/${prefix}/${VERSION}"
 
           echo "Uploading release assets to ${target}/"
-          "${OSSUTIL}" cp update.sh "${target}/update.sh" -f -e "${OSS_ENDPOINT}" -i "${OSS_ACCESS_KEY_ID}" -k "${OSS_ACCESS_KEY_SECRET}"
+          "${OSSUTIL}" cp linux/update.sh "${target}/update.sh" -f -e "${OSS_ENDPOINT}" -i "${OSS_ACCESS_KEY_ID}" -k "${OSS_ACCESS_KEY_SECRET}"
           while IFS= read -r file; do
             name="$(basename "${file}")"
             "${OSSUTIL}" cp "${file}" "${target}/${name}" -f -e "${OSS_ENDPOINT}" -i "${OSS_ACCESS_KEY_ID}" -k "${OSS_ACCESS_KEY_SECRET}"

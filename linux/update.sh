@@ -15,7 +15,7 @@ BUCKET=${BUCKET:-$DEFAULT_OSS_BUCKET}
 ENDPOINT=${ENDPOINT:-$DEFAULT_OSS_ENDPOINT}
 PREFIX=${PREFIX:-$DEFAULT_OSS_PREFIX}
 OSSUTIL=${OSSUTIL_BIN:-ossutil}
-ROOT=""
+ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 DOWNLOAD_DIR=""
 MODE=${RUN_MODE:-auto}
 CPA_SERVICE=${CPA_SERVICE:-cpa.service}
@@ -98,7 +98,7 @@ restore_file() {
   install_executable "$backup" "$destination"
 }
 restart_services() {
-  run sh "$ROOT/restart.sh" --root "$ROOT" --mode "$MODE" --cpa-service "$CPA_SERVICE" --cpamp-service "$CPAMP_SERVICE" --health-timeout "$HEALTH_TIMEOUT"
+  run sh "$ROOT/linux/restart.sh" --root "$ROOT" --mode "$MODE" --cpa-service "$CPA_SERVICE" --cpamp-service "$CPAMP_SERVICE" --health-timeout "$HEALTH_TIMEOUT"
 }
 rollback() {
   status=$?
@@ -109,13 +109,14 @@ rollback() {
   log "Update failed; restoring previous binaries and scripts..." >&2
   restore_file "$BACKUP_DIR/cli-proxy-api-plus" "$ROOT/cli-proxy-api-plus" || true
   restore_file "$BACKUP_DIR/manager/cpa-manager-plus" "$ROOT/manager/cpa-manager-plus" || true
+  restore_file "$BACKUP_DIR/start.sh" "$ROOT/start.sh" || true
   if [ "$NO_RESTART" -eq 0 ] && [ "$DRY_RUN" -eq 0 ]; then
-    sh "$STAGING_DIR/restart.sh" --root "$ROOT" --mode "$MODE" --cpa-service "$CPA_SERVICE" --cpamp-service "$CPAMP_SERVICE" --health-timeout "$HEALTH_TIMEOUT" || true
+    sh "$ROOT/linux/restart.sh" --root "$ROOT" --mode "$MODE" --cpa-service "$CPA_SERVICE" --cpamp-service "$CPAMP_SERVICE" --health-timeout "$HEALTH_TIMEOUT" || true
   fi
   for file in start.sh stop.sh restart.sh update.sh; do
-    [ -f "$BACKUP_DIR/$file" ] && cp "$BACKUP_DIR/$file" "$ROOT/$file" || true
+    [ -f "$BACKUP_DIR/linux/$file" ] && cp "$BACKUP_DIR/linux/$file" "$ROOT/linux/$file" || true
   done
-  chmod +x "$ROOT/start.sh" "$ROOT/stop.sh" "$ROOT/restart.sh" "$ROOT/update.sh" 2>/dev/null || true
+  chmod +x "$ROOT/start.sh" "$ROOT/linux/start.sh" "$ROOT/linux/stop.sh" "$ROOT/linux/restart.sh" "$ROOT/linux/update.sh" 2>/dev/null || true
   exit "$status"
 }
 verify_running_binaries() {
@@ -252,7 +253,7 @@ checksum_line=$(awk -v name="$(basename -- "$ARCHIVE")" '{ file = $NF; sub(/^\*/
 [ -n "$checksum_line" ] || fail "archive checksum not found: $(basename -- "$ARCHIVE")"
 (cd "$(dirname -- "$ARCHIVE")" && printf '%s\n' "$checksum_line" | sha256sum -c -) || fail "checksum verification failed"
 run rm -rf "$STAGING_DIR"
-run mkdir -p "$STAGING_DIR" "$BACKUP_DIR/manager"
+run mkdir -p "$STAGING_DIR" "$BACKUP_DIR/manager" "$BACKUP_DIR/linux"
 run tar -xzf "$ARCHIVE" -C "$STAGING_DIR"
 NEW_BIN=$(find "$STAGING_DIR" -type f -name cli-proxy-api-plus 2>/dev/null | head -n 1 || true)
 NEW_MANAGER_BIN=$(find "$STAGING_DIR" -type f -path '*/manager/cpa-manager-plus' 2>/dev/null | head -n 1 || true)
@@ -261,20 +262,24 @@ NEW_MANAGER_BIN=$(find "$STAGING_DIR" -type f -path '*/manager/cpa-manager-plus'
 run chmod +x "$NEW_BIN" "$NEW_MANAGER_BIN"
 [ "$DRY_RUN" -eq 1 ] || "$NEW_BIN" --version >/dev/null 2>&1 || fail "new CPA binary version check failed"
 
-for file in cli-proxy-api-plus start.sh stop.sh restart.sh update.sh; do
-  [ -f "$ROOT/$file" ] && run cp "$ROOT/$file" "$BACKUP_DIR/$file"
+for file in start.sh stop.sh restart.sh update.sh; do
+  [ -f "$ROOT/linux/$file" ] && run cp "$ROOT/linux/$file" "$BACKUP_DIR/linux/$file"
 done
+[ -f "$ROOT/cli-proxy-api-plus" ] && run cp "$ROOT/cli-proxy-api-plus" "$BACKUP_DIR/cli-proxy-api-plus"
+[ -f "$ROOT/start.sh" ] && run cp "$ROOT/start.sh" "$BACKUP_DIR/start.sh"
 [ -f "$ROOT/manager/cpa-manager-plus" ] && run cp "$ROOT/manager/cpa-manager-plus" "$BACKUP_DIR/manager/cpa-manager-plus"
 trap rollback EXIT INT TERM
 INSTALLED=1
 install_executable "$NEW_BIN" "$ROOT/cli-proxy-api-plus"
 run mkdir -p "$ROOT/manager"
 install_executable "$NEW_MANAGER_BIN" "$ROOT/manager/cpa-manager-plus"
-for file in start.sh stop.sh restart.sh README.md README_CN.md README_JA.md config.example.yaml; do
+for file in README.md README_CN.md README_JA.md config.example.yaml; do
   [ -f "$STAGING_DIR/$file" ] && run cp "$STAGING_DIR/$file" "$ROOT/$file"
 done
-[ -f "$STAGING_DIR/update.sh" ] && install_executable "$STAGING_DIR/update.sh" "$ROOT/update.sh"
-run chmod +x "$ROOT/start.sh" "$ROOT/stop.sh" "$ROOT/restart.sh"
+[ -f "$STAGING_DIR/start.sh" ] && install_executable "$STAGING_DIR/start.sh" "$ROOT/start.sh"
+for file in start.sh stop.sh restart.sh update.sh; do
+  [ -f "$STAGING_DIR/linux/$file" ] && install_executable "$STAGING_DIR/linux/$file" "$ROOT/linux/$file"
+done
 
 if [ "$NO_RESTART" -eq 0 ]; then
   restart_services

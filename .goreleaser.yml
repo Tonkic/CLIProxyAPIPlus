@@ -62,19 +62,9 @@ archives:
       - README_CN.md
       - README_JA.md
       - config.example.yaml
-      - start.sh
-      - stop.sh
-      - restart.sh
-      - update.sh
-      - windows-common.ps1
-      - start.ps1
-      - stop.ps1
-      - restart.ps1
-      - update.ps1
-      - start.cmd
-      - stop.cmd
-      - restart.cmd
-      - update.cmd
+      - '{{ if eq .Os "linux" }}start.sh{{ else }}start.cmd{{ end }}'
+      - src: '{{ .Os }}'
+        dst: '{{ .Os }}'
       - src: .manager-dist/{{ .Os }}/{{ .Arch }}/manager
         dst: manager
 

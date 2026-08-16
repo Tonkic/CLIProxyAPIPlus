@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$Root = $PSScriptRoot,
+    [string]$Root = (Split-Path -Parent $PSScriptRoot),
     [string]$Config = '',
     [string]$ManagerAddress = '127.0.0.1:18317',
     [string]$CollectorMode = 'auto',
