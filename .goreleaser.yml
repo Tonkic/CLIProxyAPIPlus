@@ -63,8 +63,7 @@ archives:
       - README_JA.md
       - config.example.yaml
       - '{{ if eq .Os "linux" }}start.sh{{ else }}start.cmd{{ end }}'
-      - src: '{{ .Os }}'
-        dst: '{{ .Os }}'
+      - src: '{{ .Os }}/**'
       - src: .manager-dist/{{ .Os }}/{{ .Arch }}/manager
         dst: manager
 
