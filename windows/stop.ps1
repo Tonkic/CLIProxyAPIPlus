@@ -1,6 +1,7 @@
 [CmdletBinding()]
-param([string]$Root = (Split-Path -Parent $PSScriptRoot), [int]$Timeout = 15)
+param([string]$Root = '', [int]$Timeout = 15)
 $ErrorActionPreference = 'Stop'
+if (-not $Root) { $Root = Split-Path -Parent $PSScriptRoot }
 . (Join-Path $PSScriptRoot 'windows-common.ps1')
 $paths = Get-CpaPaths $Root
 Stop-OwnedProcess $paths.ManagerPid $paths.ManagerExe $Timeout

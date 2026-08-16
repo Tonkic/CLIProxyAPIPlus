@@ -2,7 +2,7 @@
 param(
     [Parameter(Mandatory = $true)][string]$Tag,
     [string]$Repository = 'Tonkic/CLIProxyAPIPlus',
-    [string]$Root = (Split-Path -Parent $PSScriptRoot),
+    [string]$Root = '',
     [string]$Bucket = '',
     [string]$Prefix = '',
     [string]$Endpoint = '',
@@ -10,6 +10,7 @@ param(
     [switch]$NoRestart
 )
 $ErrorActionPreference = 'Stop'
+if (-not $Root) { $Root = Split-Path -Parent $PSScriptRoot }
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 . (Join-Path $PSScriptRoot 'windows-common.ps1')
 $paths = Get-CpaPaths $Root

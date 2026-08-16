@@ -1,6 +1,6 @@
 [CmdletBinding()]
 param(
-    [string]$Root = (Split-Path -Parent $PSScriptRoot),
+    [string]$Root = '',
     [string]$Config = '',
     [string]$ManagerAddress = '127.0.0.1:18317',
     [string]$CollectorMode = 'auto',
@@ -9,6 +9,7 @@ param(
     [int]$HealthTimeout = 30
 )
 $ErrorActionPreference = 'Stop'
+if (-not $Root) { $Root = Split-Path -Parent $PSScriptRoot }
 . (Join-Path $PSScriptRoot 'windows-common.ps1')
 $paths = Get-CpaPaths $Root
 if (-not $Config) { $Config = Join-Path $paths.Root 'config.yaml' }
