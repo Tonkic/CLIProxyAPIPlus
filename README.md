@@ -96,6 +96,8 @@ Run the built binary:
 
 Release archives include short Linux helper scripts and the CPA-Manager-Plus binary:
 
+Windows ZIP archives include `start.cmd`, `stop.cmd`, `restart.cmd`, and `update.cmd` wrappers backed by PowerShell 5.1-compatible scripts. After copying `config.example.yaml` to `config.yaml`, run `.\start.cmd`, `.\restart.cmd`, `.\stop.cmd`, or `.\update.cmd -Tag v7.2.132.4`. PID files are stored under `.runtime\` and logs under `logs\`. The updater prefers authenticated private OSS when `ossutil` is configured, then falls back to HTTPS OSS and GitHub Releases.
+
 ```text
 CLIProxyAPIPlus_<version>_linux_<arch>/
 |-- cli-proxy-api-plus

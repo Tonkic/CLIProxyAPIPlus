@@ -119,6 +119,8 @@ api-key-auth-bindings:
 
 release 包包含简短的 Linux 辅助脚本和 CPA-Manager-Plus 二进制：
 
+Windows ZIP 包含 `start.cmd`、`stop.cmd`、`restart.cmd` 和 `update.cmd`，底层脚本兼容 Windows PowerShell 5.1。将 `config.example.yaml` 复制为 `config.yaml` 后，可运行 `.\start.cmd`、`.\restart.cmd`、`.\stop.cmd` 或 `.\update.cmd -Tag v7.2.132.4`。PID 文件保存在 `.runtime\`，日志保存在 `logs\`。若已安装并配置 `ossutil`，更新器会优先使用已认证的私有 OSS，然后依次回退到 OSS HTTPS 和 GitHub Releases。
+
 ```text
 CLIProxyAPIPlus_<version>_linux_<arch>/
 |-- cli-proxy-api-plus

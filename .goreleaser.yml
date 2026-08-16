@@ -66,6 +66,15 @@ archives:
       - stop.sh
       - restart.sh
       - update.sh
+      - windows-common.ps1
+      - start.ps1
+      - stop.ps1
+      - restart.ps1
+      - update.ps1
+      - start.cmd
+      - stop.cmd
+      - restart.cmd
+      - update.cmd
       - src: .manager-dist/{{ .Os }}/{{ .Arch }}/manager
         dst: manager
 
