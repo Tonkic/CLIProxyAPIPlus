@@ -1267,6 +1267,10 @@ func TestNormalizeResponsesWebsocketRequestCreate(t *testing.T) {
 }
 
 func TestNormalizeResponseSubsequentRequestBoundsTranscriptAllocations(t *testing.T) {
+	if raceDetectorEnabled {
+		t.Skip("allocation budgets are not meaningful with race detector instrumentation")
+	}
+
 	makeInput := func(count int, role string) string {
 		var input strings.Builder
 		input.WriteByte('[')
@@ -1307,6 +1311,10 @@ func TestNormalizeResponseSubsequentRequestBoundsTranscriptAllocations(t *testin
 }
 
 func TestResponsesWebsocketFallbackTurnBoundsTranscriptAllocations(t *testing.T) {
+	if raceDetectorEnabled {
+		t.Skip("allocation budgets are not meaningful with race detector instrumentation")
+	}
+
 	makeInput := func(count int, role string) string {
 		var input strings.Builder
 		input.WriteByte('[')
