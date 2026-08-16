@@ -77,14 +77,15 @@ try {
     $newCpa = @(Get-ChildItem -LiteralPath $staging -Recurse -File -Filter 'cli-proxy-api-plus.exe')
     $newManager = @(Get-ChildItem -LiteralPath $staging -Recurse -File -Filter 'cpa-manager-plus.exe')
     if ($newCpa.Count -ne 1 -or $newManager.Count -ne 1) { throw 'Release archive has an unexpected executable layout.' }
-    $wasRunning = ($null -ne (Get-OwnedProcess $paths.CpaPid $paths.CpaExe)) -or ($null -ne (Get-OwnedProcess $paths.ManagerPid $paths.ManagerExe))
-    & (Join-Path $PSScriptRoot 'stop.ps1') -Root $paths.Root
     if (Test-Path $paths.CpaExe) { Copy-Item $paths.CpaExe (Join-Path $backup 'cli-proxy-api-plus.exe') }
     if (Test-Path $paths.ManagerExe) { Copy-Item $paths.ManagerExe (Join-Path $backup 'manager\cpa-manager-plus.exe') }
+    if (Test-Path (Join-Path $paths.Root 'start.cmd')) { Copy-Item (Join-Path $paths.Root 'start.cmd') (Join-Path $backup 'root-start.cmd') }
     foreach ($name in @('windows-common.ps1','start.ps1','stop.ps1','restart.ps1','update.ps1','start.cmd','stop.cmd','restart.cmd','update.cmd')) {
         $current = Join-Path $paths.Root "windows\$name"
         if (Test-Path $current) { Copy-Item $current (Join-Path $backup $name) }
     }
+    $wasRunning = ($null -ne (Get-OwnedProcess $paths.CpaPid $paths.CpaExe)) -or ($null -ne (Get-OwnedProcess $paths.ManagerPid $paths.ManagerExe))
+    & (Join-Path $PSScriptRoot 'stop.ps1') -Root $paths.Root
     Copy-Item $newCpa[0].FullName $paths.CpaExe -Force
     New-Item -ItemType Directory -Force -Path (Split-Path $paths.ManagerExe) | Out-Null
     Copy-Item $newManager[0].FullName $paths.ManagerExe -Force
@@ -99,6 +100,7 @@ try {
 } catch {
     if (Test-Path (Join-Path $backup 'cli-proxy-api-plus.exe')) { Copy-Item (Join-Path $backup 'cli-proxy-api-plus.exe') $paths.CpaExe -Force }
     if (Test-Path (Join-Path $backup 'manager\cpa-manager-plus.exe')) { Copy-Item (Join-Path $backup 'manager\cpa-manager-plus.exe') $paths.ManagerExe -Force }
+    if (Test-Path (Join-Path $backup 'root-start.cmd')) { Copy-Item (Join-Path $backup 'root-start.cmd') (Join-Path $paths.Root 'start.cmd') -Force }
     foreach ($name in @('windows-common.ps1','start.ps1','stop.ps1','restart.ps1','update.ps1','start.cmd','stop.cmd','restart.cmd','update.cmd')) {
         $saved = Join-Path $backup $name
         if (Test-Path $saved) { Copy-Item $saved (Join-Path $paths.Root "windows\$name") -Force }
