@@ -96,7 +96,7 @@ Run the built binary:
 
 Release archives include short Linux helper scripts and the CPA-Manager-Plus binary:
 
-Windows ZIP archives keep `start.cmd` at the root and place all operational scripts under `windows\`. After copying `config.example.yaml` to `config.yaml`, run `.\start.cmd`, `.\windows\restart.cmd`, `.\windows\stop.cmd`, or `.\windows\update.cmd -Tag v7.2.132.5`. Linux archives likewise keep only `start.sh` at the root and place the full script set under `linux/`.
+Windows ZIP archives keep `start.cmd` at the root and place all operational scripts under `windows\`. On the first run, `.\start.cmd` creates `config.yaml` from the template and exits so you can replace the placeholder API keys and review the listening address; run it again to start CPA and CPA-Manager-Plus. Use `.\windows\restart.cmd`, `.\windows\stop.cmd`, or `.\windows\update.cmd -Tag VERSION` for maintenance. Linux archives likewise keep only `start.sh` at the root and place the full script set under `linux/`.
 
 ```text
 CLIProxyAPIPlus_<version>_linux_<arch>/

@@ -12,7 +12,14 @@ $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'windows-common.ps1')
 $paths = Get-CpaPaths $Root
 if (-not $Config) { $Config = Join-Path $paths.Root 'config.yaml' }
-if (-not (Test-Path -LiteralPath $Config)) { throw "Config not found: $Config" }
+if (-not (Test-Path -LiteralPath $Config)) {
+    $exampleConfig = Join-Path $paths.Root 'config.example.yaml'
+    if (-not (Test-Path -LiteralPath $exampleConfig)) { throw "Config and template not found: $Config" }
+    Copy-Item -LiteralPath $exampleConfig -Destination $Config
+    Write-Host "Created $Config from config.example.yaml."
+    Write-Host 'Edit host, api-keys, and remote-management.secret-key as needed, then run start.cmd again.'
+    exit 2
+}
 if (-not (Test-Path -LiteralPath $paths.CpaExe)) { throw "CPA executable not found: $($paths.CpaExe)" }
 if (-not (Test-Path -LiteralPath $paths.ManagerExe)) { throw "Manager executable not found: $($paths.ManagerExe)" }
 New-Item -ItemType Directory -Force -Path $paths.Runtime, $paths.Logs, (Join-Path $paths.Root 'manager\data') | Out-Null

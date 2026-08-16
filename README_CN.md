@@ -119,7 +119,7 @@ api-key-auth-bindings:
 
 release 包包含简短的 Linux 辅助脚本和 CPA-Manager-Plus 二进制：
 
-Windows ZIP 根目录只保留 `start.cmd`，完整运维脚本位于 `windows\`。将 `config.example.yaml` 复制为 `config.yaml` 后，可运行 `.\start.cmd`、`.\windows\restart.cmd`、`.\windows\stop.cmd` 或 `.\windows\update.cmd -Tag v7.2.132.5`。Linux 包同样只在根目录保留 `start.sh`，其余脚本位于 `linux/`。
+Windows ZIP 根目录只保留 `start.cmd`，完整运维脚本位于 `windows\`。首次运行 `.\start.cmd` 会从模板创建 `config.yaml` 并退出，请先替换占位 API Key、确认监听地址，再次运行即可启动 CPA 与 CPA-Manager-Plus。日常维护使用 `.\windows\restart.cmd`、`.\windows\stop.cmd` 或 `.\windows\update.cmd -Tag VERSION`。Linux 包同样只在根目录保留 `start.sh`，其余脚本位于 `linux/`。
 
 ```text
 CLIProxyAPIPlus_<version>_linux_<arch>/
