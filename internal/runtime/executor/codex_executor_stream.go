@@ -94,7 +94,7 @@ func (e *CodexExecutor) ExecuteStream(ctx context.Context, auth *cliproxyauth.Au
 			return nil, requestErr
 		}
 		identityState = nextIdentityState
-		applyCodexHeaders(httpReq, auth, apiKey, true, e.cfg)
+		applyCodexHeaders(httpReq, auth, apiKey, true, e.cfg, opts.Headers)
 		applyModelHeaderOverrides(httpReq.Header, baseModel)
 		applyCodexIdentityConfuseHeaders(httpReq.Header, &identityState)
 		helps.RecordAPIRequest(ctx, e.cfg, helps.UpstreamRequestLog{
