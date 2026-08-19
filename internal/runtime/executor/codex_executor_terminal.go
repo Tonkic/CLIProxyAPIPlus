@@ -2,17 +2,21 @@ package executor
 
 import (
 	"bytes"
+	"fmt"
 	"net/http"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/router-for-me/CLIProxyAPI/v7/internal/config"
 	"github.com/tidwall/gjson"
 	"github.com/tidwall/sjson"
 )
 
 const codexIncompleteStreamMessage = "stream error: stream disconnected before completion: stream closed before response.completed"
+
+const defaultCodexCompletedEventBufferMaxBytes int64 = 64 << 20
 
 type codexIncompleteStreamError struct {
 	statusErr
@@ -27,6 +31,52 @@ func newCodexIncompleteStreamError() codexIncompleteStreamError {
 
 func (codexIncompleteStreamError) IsRequestScoped() bool {
 	return true
+}
+
+type codexCompletedEventBufferError struct {
+	statusErr
+}
+
+func newCodexCompletedEventBufferError(limit int64) codexCompletedEventBufferError {
+	return codexCompletedEventBufferError{statusErr: statusErr{
+		code: http.StatusBadGateway,
+		msg:  fmt.Sprintf("stream error: buffered Codex response exceeded %d bytes before response.completed", limit),
+	}}
+}
+
+type codexMalformedStreamError struct {
+	statusErr
+}
+
+func newCodexMalformedStreamError() codexMalformedStreamError {
+	return codexMalformedStreamError{statusErr: statusErr{
+		code: http.StatusBadGateway,
+		msg:  "stream error: upstream returned malformed Codex event data",
+	}}
+}
+
+type codexStrictStreamError struct {
+	statusErr
+}
+
+func newCodexStrictStreamError(err error) codexStrictStreamError {
+	message := codexIncompleteStreamMessage
+	if err != nil && strings.TrimSpace(err.Error()) != "" {
+		message = err.Error()
+	}
+	return codexStrictStreamError{statusErr: statusErr{
+		code: http.StatusBadGateway,
+		msg:  message,
+	}}
+}
+
+func codexCompletedEventBufferLimit(cfg *config.Config) int64 {
+	if cfg != nil {
+		if limit := cfg.Streaming.CompletedEventBufferMaxBytes; limit > 0 {
+			return limit
+		}
+	}
+	return defaultCodexCompletedEventBufferMaxBytes
 }
 
 // Streamed Codex responses may emit response.output_item.done events while leaving

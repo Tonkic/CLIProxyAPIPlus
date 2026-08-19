@@ -135,6 +135,11 @@ func (m *Manager) ExecuteStream(ctx context.Context, providers []string, req cli
 	}
 
 	_, maxRetryCredentials, maxWait := m.retrySettings()
+	strictCodexCompletion := m.strictCodexCompletionEnabled(normalized)
+	if strictCodexCompletion {
+		// Strict completion owns the full credential traversal for this request.
+		maxRetryCredentials = 0
+	}
 
 	var lastErr error
 	retryModel := authSelectionModelFromOptions(opts, req.Model)
@@ -147,6 +152,9 @@ func (m *Manager) ExecuteStream(ctx context.Context, providers []string, req cli
 			return nil, unwrapRequestStopError(errStream)
 		}
 		lastErr = errStream
+		if strictCodexCompletion {
+			break
+		}
 		wait, shouldRetry := m.shouldRetryAfterError(errStream, attempt, normalized, retryModel, maxWait)
 		if !shouldRetry {
 			break
@@ -171,6 +179,19 @@ func (m *Manager) ExecuteStream(ctx context.Context, providers []string, req cli
 		return nil, lastErr
 	}
 	return nil, &Error{Code: "auth_not_found", Message: "no auth available"}
+}
+
+func (m *Manager) strictCodexCompletionEnabled(providers []string) bool {
+	if len(providers) == 0 {
+		return false
+	}
+	for _, provider := range providers {
+		if !strings.EqualFold(strings.TrimSpace(provider), "codex") {
+			return false
+		}
+	}
+	cfg := m.runtimeConfigSnapshot()
+	return cfg != nil && cfg.Streaming.RequireCompletedEvent
 }
 
 type requestToFormatResolver interface {

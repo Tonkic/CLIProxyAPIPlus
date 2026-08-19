@@ -7,10 +7,12 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/router-for-me/CLIProxyAPI/v7/internal/config"
+	"github.com/router-for-me/CLIProxyAPI/v7/internal/registry"
 	_ "github.com/router-for-me/CLIProxyAPI/v7/internal/translator"
 	cliproxyauth "github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy/auth"
 	cliproxyexecutor "github.com/router-for-me/CLIProxyAPI/v7/sdk/cliproxy/executor"
@@ -246,6 +248,122 @@ func TestCodexExecutorExecuteStreamMissingCompletionIsRequestScoped(t *testing.T
 		t.Fatalf("status code = %d, want %d; err=%v", got, http.StatusRequestTimeout, streamErr)
 	}
 	assertRequestScopedTestError(t, streamErr)
+}
+
+func TestCodexStrictStreamRetriesAfterPartialOutput(t *testing.T) {
+	var badCalls atomic.Int32
+	badServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		badCalls.Add(1)
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte("data: {\"type\":\"response.output_text.delta\",\"delta\":\"must-not-leak\"}\n\n"))
+	}))
+	defer badServer.Close()
+
+	var goodCalls atomic.Int32
+	goodServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		goodCalls.Add(1)
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte("data: {\"type\":\"response.output_text.delta\",\"delta\":\"ok\"}\n\n"))
+		_, _ = w.Write([]byte("data: {\"type\":\"response.completed\",\"response\":{\"status\":\"completed\"}}\n\n"))
+	}))
+	defer goodServer.Close()
+
+	cfg := &config.Config{SDKConfig: config.SDKConfig{Streaming: config.StreamingConfig{RequireCompletedEvent: true}}}
+	manager := cliproxyauth.NewManager(nil, nil, nil)
+	manager.SetConfig(cfg)
+	manager.SetRetryConfig(100, 0, 1)
+	manager.RegisterExecutor(NewCodexExecutor(cfg))
+
+	const model = "gpt-strict-stream-test"
+	auths := []*cliproxyauth.Auth{
+		{ID: "auth-a-strict-bad", Provider: "codex", Status: cliproxyauth.StatusActive, Attributes: map[string]string{"base_url": badServer.URL, "api_key": "bad"}},
+		{ID: "auth-b-strict-good", Provider: "codex", Status: cliproxyauth.StatusActive, Attributes: map[string]string{"base_url": goodServer.URL, "api_key": "good"}},
+	}
+	for _, auth := range auths {
+		if _, errRegister := manager.Register(context.Background(), auth); errRegister != nil {
+			t.Fatalf("register %s: %v", auth.ID, errRegister)
+		}
+		registry.GetGlobalRegistry().RegisterClient(auth.ID, "codex", []*registry.ModelInfo{{ID: model}})
+		authID := auth.ID
+		t.Cleanup(func() { registry.GetGlobalRegistry().UnregisterClient(authID) })
+	}
+
+	result, err := manager.ExecuteStream(context.Background(), []string{"codex"}, cliproxyexecutor.Request{
+		Model:   model,
+		Payload: []byte(`{"model":"gpt-strict-stream-test","input":"hello"}`),
+	}, cliproxyexecutor.Options{SourceFormat: sdktranslator.FormatOpenAIResponse, Stream: true})
+	if err != nil {
+		t.Fatalf("ExecuteStream error: %v", err)
+	}
+
+	var output bytes.Buffer
+	for chunk := range result.Chunks {
+		if chunk.Err != nil {
+			t.Fatalf("stream error: %v", chunk.Err)
+		}
+		output.Write(chunk.Payload)
+	}
+	if badCalls.Load() != 1 || goodCalls.Load() != 1 {
+		t.Fatalf("upstream calls = bad:%d good:%d, want 1 each", badCalls.Load(), goodCalls.Load())
+	}
+	if strings.Contains(output.String(), "must-not-leak") {
+		t.Fatalf("failed supplier output leaked to client: %s", output.String())
+	}
+	if !strings.Contains(output.String(), `"delta":"ok"`) || !strings.Contains(output.String(), `"type":"response.completed"`) {
+		t.Fatalf("successful supplier output missing: %s", output.String())
+	}
+}
+
+func TestCodexStrictStreamTriesEverySupplierBeforeFailure(t *testing.T) {
+	var calls atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		w.Header().Set("Content-Type", "text/html")
+		_, _ = w.Write([]byte("<html>not an API response</html>"))
+	}))
+	defer server.Close()
+
+	cfg := &config.Config{SDKConfig: config.SDKConfig{Streaming: config.StreamingConfig{RequireCompletedEvent: true}}}
+	manager := cliproxyauth.NewManager(nil, nil, nil)
+	manager.SetConfig(cfg)
+	manager.SetRetryConfig(100, 0, 1)
+	manager.RegisterExecutor(NewCodexExecutor(cfg))
+
+	const model = "gpt-strict-all-fail-test"
+	for _, id := range []string{"auth-a-strict-fail", "auth-b-strict-fail"} {
+		auth := &cliproxyauth.Auth{ID: id, Provider: "codex", Status: cliproxyauth.StatusActive, Attributes: map[string]string{"base_url": server.URL, "api_key": id}}
+		if _, errRegister := manager.Register(context.Background(), auth); errRegister != nil {
+			t.Fatalf("register %s: %v", id, errRegister)
+		}
+		registry.GetGlobalRegistry().RegisterClient(id, "codex", []*registry.ModelInfo{{ID: model}})
+		authID := id
+		t.Cleanup(func() { registry.GetGlobalRegistry().UnregisterClient(authID) })
+	}
+
+	result, err := manager.ExecuteStream(context.Background(), []string{"codex"}, cliproxyexecutor.Request{
+		Model:   model,
+		Payload: []byte(`{"model":"gpt-strict-all-fail-test","input":"hello"}`),
+	}, cliproxyexecutor.Options{SourceFormat: sdktranslator.FormatOpenAIResponse, Stream: true})
+	if err != nil {
+		t.Fatalf("ExecuteStream returned direct error: %v", err)
+	}
+	var streamErr error
+	var payload bytes.Buffer
+	for chunk := range result.Chunks {
+		if chunk.Err != nil {
+			streamErr = chunk.Err
+		}
+		payload.Write(chunk.Payload)
+	}
+	if calls.Load() != 2 {
+		t.Fatalf("upstream calls = %d, want all 2 suppliers", calls.Load())
+	}
+	if streamErr == nil {
+		t.Fatal("stream error = nil, want final failure")
+	}
+	if payload.Len() != 0 {
+		t.Fatalf("failed supplier payload leaked to client: %q", payload.String())
+	}
 }
 
 func TestCodexExecutorExecuteStreamExplicitTerminalFailureIsNotSuccessful(t *testing.T) {

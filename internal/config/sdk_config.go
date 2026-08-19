@@ -89,4 +89,13 @@ type StreamingConfig struct {
 	// to allow auth rotation / transient recovery.
 	// <= 0 disables bootstrap retries. Default is 0.
 	BootstrapRetries int `yaml:"bootstrap-retries,omitempty" json:"bootstrap-retries,omitempty"`
+
+	// RequireCompletedEvent buffers Codex streams until a valid response.completed event is received.
+	// Incomplete or malformed streams can then be retried before any bytes reach the client.
+	// Enabling this disables real-time token delivery for Codex-backed streams.
+	RequireCompletedEvent bool `yaml:"require-completed-event,omitempty" json:"require-completed-event,omitempty"`
+
+	// CompletedEventBufferMaxBytes limits the buffered output for RequireCompletedEvent.
+	// <= 0 uses the default limit of 64 MiB.
+	CompletedEventBufferMaxBytes int64 `yaml:"completed-event-buffer-max-bytes,omitempty" json:"completed-event-buffer-max-bytes,omitempty"`
 }

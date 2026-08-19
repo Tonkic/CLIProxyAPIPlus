@@ -149,6 +149,44 @@ func (e *CodexExecutor) ExecuteStream(ctx context.Context, auth *cliproxyauth.Au
 		var param any
 		outputItemsByIndex := make(map[int64][]byte)
 		var outputItemsFallback [][]byte
+		requireCompletedEvent := e.cfg != nil && e.cfg.Streaming.RequireCompletedEvent
+		bufferLimit := codexCompletedEventBufferLimit(e.cfg)
+		bufferedBytes := int64(0)
+		var bufferedChunks []cliproxyexecutor.StreamChunk
+		sendChunk := func(chunk cliproxyexecutor.StreamChunk) bool {
+			if requireCompletedEvent && chunk.Err == nil {
+				bufferedBytes += int64(len(chunk.Payload))
+				if bufferedBytes > bufferLimit {
+					bufferErr := newCodexCompletedEventBufferError(bufferLimit)
+					helps.RecordAPIResponseError(ctx, e.cfg, bufferErr)
+					reporter.PublishFailure(ctx, bufferErr)
+					select {
+					case out <- cliproxyexecutor.StreamChunk{Err: bufferErr}:
+					case <-ctx.Done():
+					}
+					return false
+				}
+				chunk.Payload = bytes.Clone(chunk.Payload)
+				bufferedChunks = append(bufferedChunks, chunk)
+				return true
+			}
+			select {
+			case out <- chunk:
+				return true
+			case <-ctx.Done():
+				return false
+			}
+		}
+		flushBuffered := func() bool {
+			for i := range bufferedChunks {
+				select {
+				case out <- bufferedChunks[i]:
+				case <-ctx.Done():
+					return false
+				}
+			}
+			return true
+		}
 		for scanner.Scan() {
 			line := applyCodexIdentityConfuseResponsePayload(scanner.Bytes(), identityState)
 			helps.AppendAPIResponseChunk(ctx, e.cfg, line)
@@ -157,6 +195,13 @@ func (e *CodexExecutor) ExecuteStream(ctx context.Context, auth *cliproxyauth.Au
 
 			if bytes.HasPrefix(line, dataTag) {
 				data := bytes.TrimSpace(line[5:])
+				if requireCompletedEvent && !gjson.ValidBytes(data) {
+					streamErr := newCodexMalformedStreamError()
+					helps.RecordAPIResponseError(ctx, e.cfg, streamErr)
+					reporter.PublishFailure(ctx, streamErr)
+					sendChunk(cliproxyexecutor.StreamChunk{Err: streamErr})
+					return
+				}
 				data = helps.RestoreCodexMultiAgentV2Response(data, optimizeMultiAgentV2)
 				translatedLine = append([]byte("data: "), data...)
 				eventType := gjson.GetBytes(data, "type").String()
@@ -170,10 +215,14 @@ func (e *CodexExecutor) ExecuteStream(ctx context.Context, auth *cliproxyauth.Au
 						}
 						return
 					}
-					helps.RecordAPIResponseError(ctx, e.cfg, streamErr)
-					reporter.PublishFailure(ctx, streamErr)
+					var terminalErr error = streamErr
+					if requireCompletedEvent {
+						terminalErr = newCodexStrictStreamError(streamErr)
+					}
+					helps.RecordAPIResponseError(ctx, e.cfg, terminalErr)
+					reporter.PublishFailure(ctx, terminalErr)
 					select {
-					case out <- cliproxyexecutor.StreamChunk{Err: streamErr}:
+					case out <- cliproxyexecutor.StreamChunk{Err: terminalErr}:
 					case <-ctx.Done():
 					}
 					return
@@ -182,6 +231,13 @@ func (e *CodexExecutor) ExecuteStream(ctx context.Context, auth *cliproxyauth.Au
 				case "response.output_item.done":
 					collectCodexOutputItemDone(data, outputItemsByIndex, &outputItemsFallback)
 				case "response.completed", "response.incomplete":
+					if requireCompletedEvent && eventType == "response.incomplete" {
+						streamErr := newCodexStrictStreamError(newCodexIncompleteStreamError())
+						helps.RecordAPIResponseError(ctx, e.cfg, streamErr)
+						reporter.PublishFailure(ctx, streamErr)
+						sendChunk(cliproxyexecutor.StreamChunk{Err: streamErr})
+						return
+					}
 					terminalSuccess = true
 					if detail, ok := helps.ParseCodexUsage(data); ok {
 						reporter.Publish(ctx, detail)
@@ -198,13 +254,14 @@ func (e *CodexExecutor) ExecuteStream(ctx context.Context, auth *cliproxyauth.Au
 			translatedLine = applyCodexIdentityExposeResponsePayload(translatedLine, identityState)
 			chunks := helps.TranslateStreamWithClaudeInputTokens(ctx, to, responseFormat, req.Model, originalPayload, body, translatedLine, &param, claudeInputTokens)
 			for i := range chunks {
-				select {
-				case out <- cliproxyexecutor.StreamChunk{Payload: chunks[i]}:
-				case <-ctx.Done():
+				if !sendChunk(cliproxyexecutor.StreamChunk{Payload: chunks[i]}) {
 					return
 				}
 			}
 			if terminalSuccess {
+				if requireCompletedEvent {
+					flushBuffered()
+				}
 				return
 			}
 		}
@@ -214,7 +271,10 @@ func (e *CodexExecutor) ExecuteStream(ctx context.Context, auth *cliproxyauth.Au
 			}
 			helps.RecordAPIResponseError(ctx, e.cfg, errScan)
 		}
-		streamErr := newCodexIncompleteStreamError()
+		var streamErr error = newCodexIncompleteStreamError()
+		if requireCompletedEvent {
+			streamErr = newCodexStrictStreamError(streamErr)
+		}
 		helps.RecordAPIResponseError(ctx, e.cfg, streamErr)
 		reporter.PublishFailure(ctx, streamErr)
 		select {
