@@ -528,6 +528,41 @@ func TestConfigSynthesizer_OpenAICompat(t *testing.T) {
 	}
 }
 
+func TestConfigSynthesizer_OpenAICompat_PerKeyAffinityAndConcurrency(t *testing.T) {
+	disabled := false
+	enabled := true
+	cfg := &config.Config{OpenAICompatibility: []config.OpenAICompatibility{{
+		Name:    "aihub",
+		BaseURL: "https://example.invalid/v1",
+		APIKeyEntries: []config.OpenAICompatibilityAPIKey{
+			{APIKey: "cheap", SessionAffinity: &enabled},
+			{APIKey: "expensive", SessionAffinity: &disabled, MaxConcurrency: 2},
+			{APIKey: "inherit"},
+		},
+	}}}
+	auths, err := NewConfigSynthesizer().Synthesize(&SynthesisContext{
+		Config: cfg, Now: time.Now(), IDGenerator: NewStableIDGenerator(),
+	})
+	if err != nil {
+		t.Fatalf("Synthesize: %v", err)
+	}
+	if len(auths) != 3 {
+		t.Fatalf("auth count = %d, want 3", len(auths))
+	}
+	if got := auths[0].Attributes[coreauth.AttributeSessionAffinity]; got != "true" {
+		t.Fatalf("cheap affinity = %q, want true", got)
+	}
+	if got := auths[1].Attributes[coreauth.AttributeSessionAffinity]; got != "false" {
+		t.Fatalf("expensive affinity = %q, want false", got)
+	}
+	if got := auths[1].Attributes[coreauth.AttributeMaxConcurrency]; got != "2" {
+		t.Fatalf("expensive max concurrency = %q, want 2", got)
+	}
+	if _, exists := auths[2].Attributes[coreauth.AttributeSessionAffinity]; exists {
+		t.Fatal("inherited affinity unexpectedly emitted an explicit attribute")
+	}
+}
+
 func TestConfigSynthesizer_OpenAICompat_UsesNamespacedProviderKey(t *testing.T) {
 	synth := NewConfigSynthesizer()
 	ctx := &SynthesisContext{

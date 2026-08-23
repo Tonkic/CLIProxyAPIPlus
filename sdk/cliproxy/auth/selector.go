@@ -610,21 +610,24 @@ func availabilityBlock(unavailable, quotaExceeded bool, nextRetryAfter, nextReco
 // It extracts session ID from multiple sources and maintains session-to-auth
 // mappings with automatic failover when the bound auth becomes unavailable.
 type SessionAffinitySelector struct {
-	fallback Selector
-	cache    *SessionCache
+	fallback       Selector
+	cache          *SessionCache
+	defaultEnabled bool
 }
 
 // SessionAffinityConfig configures the session affinity selector.
 type SessionAffinityConfig struct {
-	Fallback Selector
-	TTL      time.Duration
+	Fallback       Selector
+	TTL            time.Duration
+	DefaultEnabled *bool
 }
 
 // NewSessionAffinitySelector creates a new session-aware selector.
 func NewSessionAffinitySelector(fallback Selector) *SessionAffinitySelector {
 	return NewSessionAffinitySelectorWithConfig(SessionAffinityConfig{
-		Fallback: fallback,
-		TTL:      time.Hour,
+		Fallback:       fallback,
+		TTL:            time.Hour,
+		DefaultEnabled: boolPointer(true),
 	})
 }
 
@@ -636,9 +639,39 @@ func NewSessionAffinitySelectorWithConfig(cfg SessionAffinityConfig) *SessionAff
 	if cfg.TTL <= 0 {
 		cfg.TTL = time.Hour
 	}
+	defaultEnabled := true
+	if cfg.DefaultEnabled != nil {
+		defaultEnabled = *cfg.DefaultEnabled
+	}
 	return &SessionAffinitySelector{
-		fallback: cfg.Fallback,
-		cache:    NewSessionCache(cfg.TTL),
+		fallback:       cfg.Fallback,
+		cache:          NewSessionCache(cfg.TTL),
+		defaultEnabled: defaultEnabled,
+	}
+}
+
+func boolPointer(value bool) *bool { return &value }
+
+const sessionAffinitySelectedMetadataKey = "session_affinity_selected"
+
+func (s *SessionAffinitySelector) authAffinityEnabled(auth *Auth) bool {
+	enabled := s != nil && s.defaultEnabled
+	if auth == nil || auth.Attributes == nil {
+		return enabled
+	}
+	raw, ok := auth.Attributes[AttributeSessionAffinity]
+	if !ok {
+		return enabled
+	}
+	if parsed, err := strconv.ParseBool(strings.TrimSpace(raw)); err == nil {
+		return parsed
+	}
+	return enabled
+}
+
+func setSelectedSessionAffinity(opts cliproxyexecutor.Options, enabled bool) {
+	if opts.Metadata != nil {
+		opts.Metadata[sessionAffinitySelectedMetadataKey] = enabled
 	}
 }
 
@@ -673,7 +706,11 @@ func (s *SessionAffinitySelector) Pick(ctx context.Context, provider, model stri
 			return nil, errAvailable
 		}
 		entry.Debugf("session-affinity: no session ID extracted, falling back to default selector | provider=%s model=%s", provider, model)
-		return s.fallback.Pick(ctx, provider, model, opts, fallbackAuths)
+		auth, errPick := s.fallback.Pick(ctx, provider, model, opts, fallbackAuths)
+		if errPick == nil {
+			setSelectedSessionAffinity(opts, s.authAffinityEnabled(auth))
+		}
+		return auth, errPick
 	}
 
 	// A single availability pass serves both lookups: the bound credential is validated against
@@ -697,11 +734,22 @@ func (s *SessionAffinitySelector) Pick(ctx context.Context, provider, model stri
 		}
 		s.cache.Set(cacheKey, authID)
 	}
+	bindSelected := func(auth *Auth) {
+		enabled := s.authAffinityEnabled(auth)
+		setSelectedSessionAffinity(opts, enabled)
+		if enabled {
+			bind(auth.ID)
+		}
+	}
 
 	if cachedAuthID, ok := s.cache.GetAndRefresh(cacheKey); ok {
 		for _, auth := range available {
 			if auth.ID == cachedAuthID {
-				bind(auth.ID)
+				if !s.authAffinityEnabled(auth) {
+					s.cache.InvalidateAuth(auth.ID)
+					break
+				}
+				bindSelected(auth)
 				entry.Infof("session-affinity: cache hit | session=%s auth=%s provider=%s model=%s", truncateSessionID(primaryID), auth.ID, provider, model)
 				return auth, nil
 			}
@@ -711,7 +759,7 @@ func (s *SessionAffinitySelector) Pick(ctx context.Context, provider, model stri
 		if err != nil {
 			return nil, err
 		}
-		bind(auth.ID)
+		bindSelected(auth)
 		entry.Infof("session-affinity: cache hit but auth unavailable, reselected | session=%s auth=%s provider=%s model=%s", truncateSessionID(primaryID), auth.ID, provider, model)
 		return auth, nil
 	}
@@ -720,7 +768,11 @@ func (s *SessionAffinitySelector) Pick(ctx context.Context, provider, model stri
 		if cachedAuthID, ok := s.cache.Get(fallbackKey); ok {
 			for _, auth := range available {
 				if auth.ID == cachedAuthID {
-					bind(auth.ID)
+					if !s.authAffinityEnabled(auth) {
+						s.cache.InvalidateAuth(auth.ID)
+						break
+					}
+					bindSelected(auth)
 					entry.Infof("session-affinity: fallback cache hit | session=%s fallback=%s auth=%s provider=%s model=%s", truncateSessionID(primaryID), truncateSessionID(fallbackID), auth.ID, provider, model)
 					return auth, nil
 				}
@@ -732,7 +784,7 @@ func (s *SessionAffinitySelector) Pick(ctx context.Context, provider, model stri
 	if err != nil {
 		return nil, err
 	}
-	bind(auth.ID)
+	bindSelected(auth)
 	entry.Infof("session-affinity: cache miss, new binding | session=%s auth=%s provider=%s model=%s", truncateSessionID(primaryID), auth.ID, provider, model)
 	return auth, nil
 }
@@ -773,6 +825,9 @@ func (s *SessionAffinitySelector) InvalidateAuth(authID string) {
 // OnResult handles session affinity binding or release based on execution outcome.
 func (s *SessionAffinitySelector) OnResult(res Result) {
 	if s == nil || s.cache == nil || res.AuthID == "" {
+		return
+	}
+	if enabled, ok := res.Options.Metadata[sessionAffinitySelectedMetadataKey].(bool); ok && !enabled {
 		return
 	}
 	primaryID, fallbackID := extractSessionIDs(res.Options.Headers, res.Options.OriginalRequest, res.Options.Metadata)

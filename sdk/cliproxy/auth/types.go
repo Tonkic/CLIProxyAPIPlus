@@ -103,6 +103,7 @@ type Auth struct {
 const (
 	AttributeAuthIndexSeed   = "auth_index_seed"
 	AttributeMaxConcurrency  = "max_concurrency"
+	AttributeSessionAffinity = "session_affinity"
 	AttributePluginVirtual   = "plugin_virtual"
 	AttributeVirtualSource   = "virtual_source"
 	pluginVirtualAttrEnabled = "true"

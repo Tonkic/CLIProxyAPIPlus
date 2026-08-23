@@ -212,6 +212,65 @@ func TestPatchAuthFileFields_WebsocketsFalseIsUpdate(t *testing.T) {
 	}
 }
 
+func TestPatchAuthFileFields_SessionAffinityOverridePersistsAndResets(t *testing.T) {
+	t.Setenv("MANAGEMENT_PASSWORD", "")
+	authDir := t.TempDir()
+	fileName := "codex.json"
+	filePath := filepath.Join(authDir, fileName)
+	store := fileauth.NewFileTokenStore()
+	store.SetBaseDir(authDir)
+	manager := coreauth.NewManager(store, nil, nil)
+	record := &coreauth.Auth{
+		ID: fileName, FileName: fileName, Provider: "codex",
+		Attributes: map[string]string{"path": filePath, coreauth.AttributeSessionAffinity: "true"},
+		Metadata: map[string]any{"type": "codex", coreauth.AttributeSessionAffinity: true},
+	}
+	if _, err := manager.Register(context.Background(), record); err != nil {
+		t.Fatalf("Register: %v", err)
+	}
+	h := NewHandlerWithoutConfigFilePath(&config.Config{AuthDir: authDir}, manager)
+	patch := func(body string) *httptest.ResponseRecorder {
+		t.Helper()
+		rec := httptest.NewRecorder()
+		ctx, _ := gin.CreateTestContext(rec)
+		ctx.Request = httptest.NewRequest(http.MethodPatch, "/v0/management/auth-files/fields", strings.NewReader(body))
+		ctx.Request.Header.Set("Content-Type", "application/json")
+		h.PatchAuthFileFields(ctx)
+		return rec
+	}
+	if rec := patch(`{"name":"codex.json","session_affinity":false}`); rec.Code != http.StatusOK {
+		t.Fatalf("false patch status = %d, body=%s", rec.Code, rec.Body.String())
+	}
+	updated, _ := manager.GetByID(fileName)
+	if got := updated.Attributes[coreauth.AttributeSessionAffinity]; got != "false" {
+		t.Fatalf("runtime affinity = %q, want false", got)
+	}
+	if got, ok := updated.Metadata[coreauth.AttributeSessionAffinity].(bool); !ok || got {
+		t.Fatalf("metadata affinity = %#v, want false", updated.Metadata[coreauth.AttributeSessionAffinity])
+	}
+	if rec := patch(`{"name":"codex.json","session_affinity":null}`); rec.Code != http.StatusOK {
+		t.Fatalf("reset patch status = %d, body=%s", rec.Code, rec.Body.String())
+	}
+	updated, _ = manager.GetByID(fileName)
+	if _, ok := updated.Attributes[coreauth.AttributeSessionAffinity]; ok {
+		t.Fatalf("runtime affinity remains after reset: %#v", updated.Attributes)
+	}
+	if _, ok := updated.Metadata[coreauth.AttributeSessionAffinity]; ok {
+		t.Fatalf("metadata affinity remains after reset: %#v", updated.Metadata)
+	}
+	raw, err := os.ReadFile(filePath)
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	var persisted map[string]any
+	if err := json.Unmarshal(raw, &persisted); err != nil {
+		t.Fatalf("Unmarshal: %v", err)
+	}
+	if _, ok := persisted[coreauth.AttributeSessionAffinity]; ok {
+		t.Fatalf("persisted affinity remains after reset: %#v", persisted)
+	}
+}
+
 func TestPatchAuthFileFields_ArbitraryFieldsPersistToFile(t *testing.T) {
 	t.Setenv("MANAGEMENT_PASSWORD", "")
 

@@ -291,6 +291,21 @@ func (h *Handler) PatchAuthFileFields(c *gin.Context) {
 		} else if rootAuthFileField(fieldPath) == coreauth.AttributeWeight {
 			c.JSON(http.StatusBadRequest, gin.H{"error": "weight does not support nested fields"})
 			return
+		} else if fieldPath == coreauth.AttributeSessionAffinity || fieldPath == "session-affinity" {
+			if value == nil {
+				delete(targetAuth.Metadata, coreauth.AttributeSessionAffinity)
+				delete(targetAuth.Metadata, "session-affinity")
+			} else {
+				enabled, okBool := authFileBoolValue(value)
+				if !okBool {
+					c.JSON(http.StatusBadRequest, gin.H{"error": "session-affinity must be a boolean"})
+					return
+				}
+				// Store the canonical snake_case key so all token stores persist
+				// one unambiguous field and the synthesizer can reload it.
+				targetAuth.Metadata[coreauth.AttributeSessionAffinity] = enabled
+				delete(targetAuth.Metadata, "session-affinity")
+			}
 		} else if fieldPath == "headers" {
 			applyAuthFileHeadersPatch(targetAuth, value)
 		} else if errSet := setAuthFileMetadataValue(targetAuth.Metadata, fieldPath, value); errSet != nil {
@@ -457,6 +472,12 @@ func syncAuthFileMetadataFields(auth *coreauth.Auth, touchedRoots map[string]str
 	if _, ok := touchedRoots["websockets"]; ok {
 		syncAuthFileWebsocketsAttribute(auth)
 	}
+	if _, ok := touchedRoots[coreauth.AttributeSessionAffinity]; ok {
+		syncAuthFileSessionAffinityAttribute(auth)
+	}
+	if _, ok := touchedRoots["session-affinity"]; ok {
+		syncAuthFileSessionAffinityAttribute(auth)
+	}
 	if _, ok := touchedRoots["disabled"]; ok {
 		syncAuthFileDisabledState(auth)
 	}
@@ -566,6 +587,26 @@ func syncAuthFileWebsocketsAttribute(auth *coreauth.Auth) {
 		return
 	}
 	auth.Attributes["websockets"] = strconv.FormatBool(websockets)
+}
+
+func syncAuthFileSessionAffinityAttribute(auth *coreauth.Auth) {
+	if auth == nil {
+		return
+	}
+	if auth.Attributes == nil {
+		auth.Attributes = make(map[string]string)
+	}
+	value, ok := authFileBoolValue(auth.Metadata[coreauth.AttributeSessionAffinity])
+	if !ok {
+		// Also accept the documented YAML-style spelling when an auth file was
+		// edited manually. Preserve the canonical runtime attribute either way.
+		value, ok = authFileBoolValue(auth.Metadata["session-affinity"])
+	}
+	if !ok {
+		delete(auth.Attributes, coreauth.AttributeSessionAffinity)
+		return
+	}
+	auth.Attributes[coreauth.AttributeSessionAffinity] = strconv.FormatBool(value)
 }
 
 func authFileBoolValue(value any) (bool, bool) {

@@ -80,6 +80,9 @@ func describeOpenAICompatibilityUpdate(oldEntry, newEntry config.OpenAICompatibi
 	if oldEntry.Disabled != newEntry.Disabled {
 		details = append(details, fmt.Sprintf("disabled %t -> %t", oldEntry.Disabled, newEntry.Disabled))
 	}
+	if !optionalBoolEqual(oldEntry.SessionAffinity, newEntry.SessionAffinity) {
+		details = append(details, fmt.Sprintf("session-affinity %s -> %s", formatOptionalBool(oldEntry.SessionAffinity), formatOptionalBool(newEntry.SessionAffinity)))
+	}
 	if oldEntry.SupportPromptCacheKey != newEntry.SupportPromptCacheKey {
 		details = append(details, fmt.Sprintf("support-prompt-cache-key %t -> %t", oldEntry.SupportPromptCacheKey, newEntry.SupportPromptCacheKey))
 	}
@@ -91,6 +94,17 @@ func describeOpenAICompatibilityUpdate(oldEntry, newEntry config.OpenAICompatibi
 	}
 	if oldKeyCount != newKeyCount {
 		details = append(details, fmt.Sprintf("api-keys %d -> %d", oldKeyCount, newKeyCount))
+	} else {
+		for index := range oldEntry.APIKeyEntries {
+			oldKey := oldEntry.APIKeyEntries[index]
+			newKey := newEntry.APIKeyEntries[index]
+			if !optionalBoolEqual(oldKey.SessionAffinity, newKey.SessionAffinity) {
+				details = append(details, fmt.Sprintf("api-key[%d].session-affinity %s -> %s", index, formatOptionalBool(oldKey.SessionAffinity), formatOptionalBool(newKey.SessionAffinity)))
+			}
+			if oldKey.MaxConcurrency != newKey.MaxConcurrency {
+				details = append(details, fmt.Sprintf("api-key[%d].max-concurrency %d -> %d", index, oldKey.MaxConcurrency, newKey.MaxConcurrency))
+			}
+		}
 	}
 	if oldModelCount != newModelCount {
 		details = append(details, fmt.Sprintf("models %d -> %d", oldModelCount, newModelCount))

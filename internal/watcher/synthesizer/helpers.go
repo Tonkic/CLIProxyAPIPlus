@@ -112,6 +112,15 @@ func addRequestRetryToMetadata(requestRetry *int, metadata map[string]any) {
 	metadata["request_retry"] = *requestRetry
 }
 
+// addSessionAffinityToAttrs copies an explicit per-credential affinity override.
+// A missing attribute means the credential inherits routing.session-affinity.
+func addSessionAffinityToAttrs(sessionAffinity *bool, attrs map[string]string) {
+	if sessionAffinity == nil || attrs == nil {
+		return
+	}
+	attrs[coreauth.AttributeSessionAffinity] = fmt.Sprintf("%t", *sessionAffinity)
+}
+
 // addRequestScopedErrorsToMetadata copies per-credential request-scoped error rules into metadata.
 func addRequestScopedErrorsToMetadata(rules []config.RequestScopedErrorRule, metadata map[string]any) {
 	if len(rules) == 0 || metadata == nil {

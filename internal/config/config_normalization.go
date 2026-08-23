@@ -136,6 +136,11 @@ func (cfg *Config) SanitizeOpenAICompatibility() {
 		e.Prefix = normalizeModelPrefix(e.Prefix)
 		e.BaseURL = strings.TrimSpace(e.BaseURL)
 		e.Headers = NormalizeHeaders(e.Headers)
+		for keyIndex := range e.APIKeyEntries {
+			if e.APIKeyEntries[keyIndex].MaxConcurrency < 0 {
+				e.APIKeyEntries[keyIndex].MaxConcurrency = 0
+			}
+		}
 		if e.BaseURL == "" {
 			// Skip providers with no base-url; treated as removed
 			continue

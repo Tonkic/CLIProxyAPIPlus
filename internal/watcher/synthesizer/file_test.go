@@ -132,6 +132,48 @@ func TestFileSynthesizer_Synthesize_ValidAuthFile(t *testing.T) {
 	}
 }
 
+func TestFileSynthesizer_Synthesize_SessionAffinityOverride(t *testing.T) {
+	tests := []struct {
+		name       string
+		field      string
+		wantAttr   string
+		expectAttr bool
+	}{
+		{name: "explicit false", field: `"session_affinity":false`, wantAttr: "false", expectAttr: true},
+		{name: "explicit true", field: `"session-affinity":true`, wantAttr: "true", expectAttr: true},
+		{name: "missing inherits global", field: "", expectAttr: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tempDir := t.TempDir()
+			fullPath := filepath.Join(tempDir, "codex.json")
+			raw := `{"type":"codex","email":"oauth@example.com"`
+			if tt.field != "" {
+				raw += "," + tt.field
+			}
+			raw += "}"
+			if err := os.WriteFile(fullPath, []byte(raw), 0644); err != nil {
+				t.Fatalf("write auth file: %v", err)
+			}
+			auths, err := SynthesizeAuthFile(&SynthesisContext{
+				Config:  &config.Config{},
+				AuthDir: tempDir,
+				Now:     time.Now(),
+			}, fullPath, []byte(raw))
+			if err != nil {
+				t.Fatalf("SynthesizeAuthFile: %v", err)
+			}
+			if len(auths) != 1 {
+				t.Fatalf("auth count = %d, want 1", len(auths))
+			}
+			got, ok := auths[0].Attributes[coreauth.AttributeSessionAffinity]
+			if ok != tt.expectAttr || (ok && got != tt.wantAttr) {
+				t.Fatalf("session affinity attr = %q, %v; want %q, %v", got, ok, tt.wantAttr, tt.expectAttr)
+			}
+		})
+	}
+}
+
 func TestFileSynthesizer_Synthesize_KimiFingerprintProfile(t *testing.T) {
 	tempDir := t.TempDir()
 	authData := map[string]any{

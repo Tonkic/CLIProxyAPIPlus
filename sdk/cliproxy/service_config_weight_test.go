@@ -16,9 +16,11 @@ func TestWeightedRoundRobinRoutingSelector(t *testing.T) {
 	if state.strategy != "weighted-round-robin" {
 		t.Fatalf("strategy = %q, want weighted-round-robin", state.strategy)
 	}
-	if _, ok := newRoutingSelector(state).(*coreauth.WeightedRoundRobinSelector); !ok {
-		t.Fatalf("selector type = %T, want *auth.WeightedRoundRobinSelector", newRoutingSelector(state))
+	selector, ok := newRoutingSelector(state).(*coreauth.SessionAffinitySelector)
+	if !ok {
+		t.Fatalf("selector type = %T, want *auth.SessionAffinitySelector", newRoutingSelector(state))
 	}
+	selector.Stop()
 }
 
 func TestServiceRejectsInvalidCredentialWeightConfigCommit(t *testing.T) {

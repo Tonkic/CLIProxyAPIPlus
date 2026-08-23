@@ -105,6 +105,7 @@ func (s *ConfigSynthesizer) synthesizeGeminiKeyEntries(ctx *SynthesisContext, en
 			attrs["priority"] = strconv.Itoa(entry.Priority)
 		}
 		addWeightToAttrs(entry.Weight, attrs)
+		addSessionAffinityToAttrs(entry.SessionAffinity, attrs)
 		if base != "" {
 			attrs["base_url"] = base
 		}
@@ -164,6 +165,7 @@ func (s *ConfigSynthesizer) synthesizeClaudeKeys(ctx *SynthesisContext) []*corea
 			attrs["priority"] = strconv.Itoa(ck.Priority)
 		}
 		addWeightToAttrs(ck.Weight, attrs)
+		addSessionAffinityToAttrs(ck.SessionAffinity, attrs)
 		if base != "" {
 			attrs["base_url"] = base
 		}
@@ -239,6 +241,7 @@ func (s *ConfigSynthesizer) synthesizeCodexStyleKeys(ctx *SynthesisContext, entr
 			attrs["priority"] = strconv.Itoa(entry.Priority)
 		}
 		addWeightToAttrs(entry.Weight, attrs)
+		addSessionAffinityToAttrs(entry.SessionAffinity, attrs)
 		if baseURL != "" {
 			attrs["base_url"] = baseURL
 		}
@@ -322,6 +325,10 @@ func (s *ConfigSynthesizer) synthesizeOpenAICompat(ctx *SynthesisContext) []*cor
 				attrs["priority"] = strconv.Itoa(compat.Priority)
 			}
 			addWeightToAttrs(entry.Weight, attrs)
+			addSessionAffinityToAttrs(entry.SessionAffinity, attrs)
+			if entry.MaxConcurrency > 0 {
+				attrs[coreauth.AttributeMaxConcurrency] = strconv.Itoa(entry.MaxConcurrency)
+			}
 			if key != "" {
 				attrs["api_key"] = key
 			}
@@ -367,6 +374,7 @@ func (s *ConfigSynthesizer) synthesizeOpenAICompat(ctx *SynthesisContext) []*cor
 			if compat.Priority != 0 {
 				attrs["priority"] = strconv.Itoa(compat.Priority)
 			}
+			addSessionAffinityToAttrs(compat.SessionAffinity, attrs)
 			if hash := diff.ComputeOpenAICompatModelsHash(compat.Models); hash != "" {
 				attrs["models_hash"] = hash
 			}
@@ -418,6 +426,7 @@ func (s *ConfigSynthesizer) synthesizeVertexCompat(ctx *SynthesisContext) []*cor
 			attrs["priority"] = strconv.Itoa(compat.Priority)
 		}
 		addWeightToAttrs(compat.Weight, attrs)
+		addSessionAffinityToAttrs(compat.SessionAffinity, attrs)
 		if key != "" {
 			attrs["api_key"] = key
 		}
@@ -502,6 +511,7 @@ func (s *ConfigSynthesizer) synthesizeKiroKeys(ctx *SynthesisContext) []*coreaut
 			"source":       fmt.Sprintf("config:kiro[%s]", token),
 			"access_token": accessToken,
 		}
+		addSessionAffinityToAttrs(kk.SessionAffinity, attrs)
 		if profileArn != "" {
 			attrs["profile_arn"] = profileArn
 		}

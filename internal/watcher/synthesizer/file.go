@@ -133,6 +133,7 @@ func synthesizeFileAuths(ctx *SynthesisContext, fullPath string, data []byte) ([
 				coreauth.SetOAuthModelAliasesAttribute(auth, perAccountModelAliases)
 				ApplyAuthExcludedModelsMeta(auth, cfg, perAccountExcluded, "oauth")
 				coreauth.ApplyCustomHeadersFromMetadata(auth)
+				applySessionAffinityFromMetadata(auth, metadata)
 				applyFingerprintProfileAttribute(auth, metadata)
 			}
 			return auths, nil
@@ -221,6 +222,7 @@ func synthesizeFileAuths(ctx *SynthesisContext, fullPath string, data []byte) ([
 		}
 	}
 	coreauth.ApplyCustomHeadersFromMetadata(a)
+	applySessionAffinityFromMetadata(a, metadata)
 	coreauth.SetOAuthModelAliasesAttribute(a, perAccountModelAliases)
 	ApplyAuthExcludedModelsMeta(a, cfg, perAccountExcluded, "oauth")
 	applyFingerprintProfileAttribute(a, metadata)
@@ -235,6 +237,41 @@ func synthesizeFileAuths(ctx *SynthesisContext, fullPath string, data []byte) ([
 		}
 	}
 	return []*coreauth.Auth{a}, nil
+}
+
+// applySessionAffinityFromMetadata applies an explicit per-auth session affinity
+// override from an OAuth auth file. Missing values intentionally remain absent
+// so the selector can inherit the global routing.session-affinity setting.
+// Both snake_case and hyphenated spellings are accepted for compatibility with
+// existing auth-file/config conventions; snake_case takes precedence.
+func applySessionAffinityFromMetadata(auth *coreauth.Auth, metadata map[string]any) {
+	if auth == nil || metadata == nil {
+		return
+	}
+	raw, ok := metadata[coreauth.AttributeSessionAffinity]
+	if !ok {
+		raw, ok = metadata["session-affinity"]
+	}
+	if !ok {
+		return
+	}
+	var enabled bool
+	switch typed := raw.(type) {
+	case bool:
+		enabled = typed
+	case string:
+		parsed, err := strconv.ParseBool(strings.TrimSpace(typed))
+		if err != nil {
+			return
+		}
+		enabled = parsed
+	default:
+		return
+	}
+	if auth.Attributes == nil {
+		auth.Attributes = make(map[string]string)
+	}
+	auth.Attributes[coreauth.AttributeSessionAffinity] = strconv.FormatBool(enabled)
 }
 
 func parsePluginFileAuths(parser PluginAuthParser, req pluginapi.AuthParseRequest) ([]*coreauth.Auth, bool, error) {

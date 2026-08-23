@@ -79,6 +79,48 @@ func TestManagerAuthConcurrencyFallsBackToAnotherCredential(t *testing.T) {
 	}
 }
 
+func TestManagerAuthConcurrencySessionAffinityFallsBackToAnotherCredential(t *testing.T) {
+	m := NewManager(nil, NewSessionAffinitySelector(&RoundRobinSelector{}), nil)
+	m.SetRetryConfig(0, 0, 1)
+	executor := &concurrencyTestExecutor{started: make(chan string, 2), release: make(chan struct{}, 2)}
+	m.RegisterExecutor(executor)
+	limited := &Auth{ID: "limited-sticky", Provider: "test", Attributes: map[string]string{AttributeMaxConcurrency: "1", "priority": "1"}}
+	fallback := &Auth{ID: "fallback", Provider: "test"}
+	for _, auth := range []*Auth{limited, fallback} {
+		if _, err := m.Register(context.Background(), auth); err != nil {
+			t.Fatalf("Register(%s): %v", auth.ID, err)
+		}
+	}
+	opts := cliproxyexecutor.Options{Headers: http.Header{"X-Session-Id": []string{"busy-sticky-session"}}}
+
+	firstDone := make(chan error, 1)
+	go func() {
+		_, err := m.Execute(context.Background(), []string{"test"}, cliproxyexecutor.Request{}, opts)
+		firstDone <- err
+	}()
+	if got := <-executor.started; got != limited.ID {
+		t.Fatalf("first auth = %q, want %q", got, limited.ID)
+	}
+
+	secondDone := make(chan error, 1)
+	go func() {
+		_, err := m.Execute(context.Background(), []string{"test"}, cliproxyexecutor.Request{}, opts)
+		secondDone <- err
+	}()
+	if got := <-executor.started; got != fallback.ID {
+		t.Fatalf("second auth = %q, want %q when sticky auth is full", got, fallback.ID)
+	}
+
+	executor.release <- struct{}{}
+	executor.release <- struct{}{}
+	if err := <-firstDone; err != nil {
+		t.Fatalf("first execute: %v", err)
+	}
+	if err := <-secondDone; err != nil {
+		t.Fatalf("second execute: %v", err)
+	}
+}
+
 func TestManagerAuthConcurrencyReturnsRetryable429(t *testing.T) {
 	m := NewManager(nil, nil, nil)
 	executor := &concurrencyTestExecutor{started: make(chan string, 1), release: make(chan struct{}, 1)}

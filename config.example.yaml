@@ -35,6 +35,12 @@ remote-management:
 # Authentication directory (supports ~ for home directory)
 auth-dir: "~/.cli-proxy-api"
 
+# OAuth/token auth JSON files may override routing.session-affinity per account.
+# Use the canonical snake_case key (the hyphenated spelling is also accepted):
+#   {"type":"codex", "session_affinity":false}
+# Omit the field to inherit routing.session-affinity. This applies to one auth
+# file only; it does not change the global setting or other accounts.
+
 # API keys for authentication
 api-keys:
   - "your-api-key-1"
@@ -216,6 +222,8 @@ routing:
   # credential is kept even if a higher-priority credential recovers. Credential priority
   # still decides cold bindings, requests without a session, and post-failover rebinding.
   session-affinity: false # default: false
+  # Individual config credentials may override this with session-affinity: true/false.
+  # Omit the per-credential field to inherit this global value.
   # How long session-to-auth bindings are retained. Default: 1h
   session-affinity-ttl: "1h"
 
@@ -298,6 +306,7 @@ nonstream-keepalive-interval: 0
 # gemini-api-key:
 #   - api-key: "AIzaSy...01"
 #     weight: 5 # optional: weighted-round-robin share; omitted defaults to 1; maximum 1,000,000
+#     session-affinity: false # optional per-key override; omit to inherit routing.session-affinity
 #     prefix: "test" # optional: require calls like "test/gemini-3-pro-preview" to target this credential
 #     disable-cooling: false # optional override: true disables cooling, false enables it; omit to inherit global
 #     request-retry: 3 # optional: per-auth override of the global request-retry; 0 disables retries; omit or set < 0 to use the global value
@@ -613,6 +622,8 @@ nonstream-keepalive-interval: 0
 #     api-key-entries:
 #       - api-key: "sk-or-v1-...b780"
 #         weight: 5 # optional: weighted-round-robin share; omitted defaults to 1; maximum 1,000,000
+#         session-affinity: false # optional per-key override; omit to inherit routing.session-affinity
+#         max-concurrency: 2 # optional: full keys are skipped and the next key is tried; 0/unset is unlimited
 #         proxy-url: "socks5://proxy.example.com:1080" # optional: per-key proxy override
 #         # proxy-url: "direct" # optional: explicit direct connect for this credential
 #       - api-key: "sk-or-v1-...b781" # without proxy-url
