@@ -188,7 +188,13 @@ func (r *UsageReporter) MarkFirstResponseByte() {
 	if start.IsZero() {
 		return
 	}
-	r.setTTFT(time.Since(start))
+	// Very fast local responses can measure as zero on coarse Windows timers;
+	// preserve the invariant that an observed response has a positive TTFT.
+	ttft := time.Since(start)
+	if ttft <= 0 {
+		ttft = time.Nanosecond
+	}
+	r.setTTFT(ttft)
 }
 
 func (r *UsageReporter) buildAdditionalModelRecord(model string, detail usage.Detail) (usage.Record, bool) {

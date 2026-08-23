@@ -97,7 +97,7 @@ func TestPendingClaudeStreamErrorUsesBufferedError(t *testing.T) {
 	errs <- wantErr
 	close(errs)
 
-	gotErr, ok := pendingClaudeStreamError(errs)
+	gotErr, ok := handlers.PendingStreamError(errs)
 	if !ok {
 		t.Fatal("expected pending stream error")
 	}

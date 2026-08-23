@@ -43,9 +43,13 @@ func TestHomeCodexTerminalStreamFailureUsesFreshDispatchOnNextRequest(t *testing
 		}
 		if connections.Add(1) == 1 {
 			_ = conn.WriteJSON(map[string]any{"type": "response.created", "response": map[string]any{"id": "response-1"}})
+			_ = conn.WriteJSON(map[string]any{"type": "response.output_text.delta", "delta": "partial"})
 			_ = conn.WriteJSON(map[string]any{"type": "error", "status": http.StatusBadGateway, "error": map[string]any{"message": "terminal failure"}})
 		} else {
+			_ = conn.WriteJSON(map[string]any{"type": "response.output_text.delta", "delta": "ok"})
 			_ = conn.WriteJSON(map[string]any{"type": "response.completed", "response": map[string]any{"id": "response-2", "output": []any{}}})
+			_ = conn.Close()
+			return
 		}
 		for {
 			if _, _, errRead := conn.ReadMessage(); errRead != nil {
@@ -66,6 +70,7 @@ func TestHomeCodexTerminalStreamFailureUsesFreshDispatchOnNextRequest(t *testing
 	}}
 	manager := cliproxyauth.NewManager(nil, nil, nil)
 	manager.SetConfig(&config.Config{Home: config.HomeConfig{Enabled: true}})
+	manager.SetRetryConfig(0, 0, 0)
 	manager.PublishHomeDispatch(dispatcher, executionregistry.New(), 1)
 	manager.RegisterExecutor(NewCodexWebsocketsExecutor(&config.Config{}))
 

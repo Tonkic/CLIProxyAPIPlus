@@ -44,6 +44,7 @@ func (e *XAIExecutor) executeImages(ctx context.Context, auth *cliproxyauth.Auth
 
 	httpClient := helps.NewProxyAwareHTTPClient(ctx, e.cfg, auth, 0)
 	httpClient = reporter.TrackHTTPClient(httpClient)
+	reporter.StartResponseTTFT()
 	httpResp, err := httpClient.Do(httpReq)
 	if err != nil {
 		helps.RecordAPIResponseError(ctx, e.cfg, err)
@@ -61,6 +62,7 @@ func (e *XAIExecutor) executeImages(ctx context.Context, auth *cliproxyauth.Auth
 		helps.RecordAPIResponseError(ctx, e.cfg, err)
 		return resp, err
 	}
+	reporter.MarkFirstResponseByte()
 	helps.AppendAPIResponseChunk(ctx, e.cfg, data)
 
 	if httpResp.StatusCode < 200 || httpResp.StatusCode >= 300 {

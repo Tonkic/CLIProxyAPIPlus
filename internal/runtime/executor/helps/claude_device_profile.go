@@ -616,12 +616,14 @@ func ApplyClaudeLegacyDeviceHeaders(r *http.Request, ginHeaders http.Header, cfg
 	if confirmedClaudeCode {
 		miscEnsure("X-Stainless-Runtime-Version", profile.RuntimeVersion, func(value string) bool { return value == profile.RuntimeVersion })
 		miscEnsure("X-Stainless-Package-Version", profile.PackageVersion, func(value string) bool { return value == profile.PackageVersion })
-		miscEnsure("X-Stainless-Os", mapStainlessOS(), nil)
-		miscEnsure("X-Stainless-Arch", mapStainlessArch(), nil)
+		r.Header.Set("X-Stainless-Os", profile.OS)
+		r.Header.Set("X-Stainless-Arch", profile.Arch)
 		if clientUA := strings.TrimSpace(ginHeaders.Get("User-Agent")); plausibleClaudeCodeUserAgent(clientUA, cfg) {
 			r.Header.Set("User-Agent", clientUA)
-			return
+		} else {
+			r.Header.Set("User-Agent", profile.UserAgent)
 		}
+		return
 	}
 
 	// Unconfirmed clients must not leak a copied or third-party software profile

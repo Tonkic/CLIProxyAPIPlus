@@ -1403,6 +1403,11 @@ func removeHeadFileObject(t *testing.T, repoDir, path string) {
 	if errOpen != nil {
 		t.Fatalf("open repository before object removal: %v", errOpen)
 	}
+	defer func() {
+		if errClose := repo.Close(); errClose != nil {
+			t.Errorf("close repository after object removal: %v", errClose)
+		}
+	}()
 	worktree, errWorktree := repo.Worktree()
 	if errWorktree != nil {
 		t.Fatalf("open worktree before object removal: %v", errWorktree)
