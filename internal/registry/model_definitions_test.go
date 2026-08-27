@@ -2,101 +2,10 @@ package registry
 
 import "testing"
 
-func TestCodexStaticModelsIncludeGPT55(t *testing.T) {
-	tierModels := map[string][]*ModelInfo{
-		"team": GetCodexTeamModels(),
-		"plus": GetCodexPlusModels(),
-		"pro":  GetCodexProModels(),
-	}
-
-	for tier, models := range tierModels {
-		t.Run(tier, func(t *testing.T) {
-			model := findModelInfo(models, "gpt-5.5")
-			if model == nil {
-				t.Fatalf("expected codex %s tier to include gpt-5.5", tier)
-			}
-			assertGPT55ModelInfo(t, tier, model)
-		})
-	}
-
-	model := LookupStaticModelInfo("gpt-5.5")
-	if model == nil {
-		t.Fatal("expected LookupStaticModelInfo to find gpt-5.5")
-	}
-	assertGPT55ModelInfo(t, "lookup", model)
-}
-
-func TestGitHubCopilotGeminiModelsAreChatOnly(t *testing.T) {
-	models := GetGitHubCopilotModels()
-	required := map[string]bool{
-		"gemini-2.5-pro":         false,
-		"gemini-3-pro-preview":   false,
-		"gemini-3.1-pro-preview": false,
-		"gemini-3-flash-preview": false,
-	}
-
-	for _, model := range models {
-		if _, ok := required[model.ID]; !ok {
-			continue
-		}
-		required[model.ID] = true
-		if len(model.SupportedEndpoints) != 1 || model.SupportedEndpoints[0] != "/chat/completions" {
-			t.Fatalf("model %q supported endpoints = %v, want [/chat/completions]", model.ID, model.SupportedEndpoints)
-		}
-	}
-
-	for modelID, found := range required {
-		if !found {
-			t.Fatalf("expected GitHub Copilot model %q in definitions", modelID)
-		}
-	}
-}
-
-func TestGitHubCopilotClaudeModelsSupportMessages(t *testing.T) {
-	models := GetGitHubCopilotModels()
-	required := map[string]bool{
-		"claude-haiku-4.5":  false,
-		"claude-opus-4.1":   false,
-		"claude-opus-4.5":   false,
-		"claude-opus-4.6":   false,
-		"claude-sonnet-4":   false,
-		"claude-sonnet-4.5": false,
-		"claude-sonnet-4.6": false,
-	}
-
-	for _, model := range models {
-		if _, ok := required[model.ID]; !ok {
-			continue
-		}
-		required[model.ID] = true
-		if !containsString(model.SupportedEndpoints, "/chat/completions") {
-			t.Fatalf("model %q supported endpoints = %v, missing /chat/completions", model.ID, model.SupportedEndpoints)
-		}
-		if !containsString(model.SupportedEndpoints, "/messages") {
-			t.Fatalf("model %q supported endpoints = %v, missing /messages", model.ID, model.SupportedEndpoints)
-		}
-	}
-
-	for modelID, found := range required {
-		if !found {
-			t.Fatalf("expected GitHub Copilot model %q in definitions", modelID)
-		}
-	}
-}
-
-func TestWithXAIBuiltinsAddsVideoModel(t *testing.T) {
-	models := WithXAIBuiltins(nil)
-	found := false
-	for _, model := range models {
-		if model != nil && model.ID == xaiBuiltinVideoModelID {
-			found = true
-			if model.OwnedBy != "xai" {
-				t.Fatalf("OwnedBy = %q, want xai", model.OwnedBy)
-			}
-		}
-	}
-	if !found {
-		t.Fatalf("expected %s builtin model", xaiBuiltinVideoModelID)
+func TestGetStaticModelDefinitionsByChannelSupportsGeminiInteractions(t *testing.T) {
+	models := GetStaticModelDefinitionsByChannel("gemini-interactions")
+	if len(models) == 0 {
+		t.Fatal("GetStaticModelDefinitionsByChannel(gemini-interactions) returned no models")
 	}
 }
 

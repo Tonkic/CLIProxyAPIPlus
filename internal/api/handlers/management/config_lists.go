@@ -220,11 +220,24 @@ func (h *Handler) PatchGeminiKey(c *gin.Context) {
 	if targetIndex == -1 && body.Match != nil {
 		match := strings.TrimSpace(*body.Match)
 		if match != "" {
+			baseRaw, hasBase := c.GetQuery("base-url")
+			base := strings.TrimSpace(baseRaw)
+			matches := make([]int, 0, 1)
 			for i := range h.cfg.GeminiKey {
-				if h.cfg.GeminiKey[i].APIKey == match {
-					targetIndex = i
-					break
+				if strings.TrimSpace(h.cfg.GeminiKey[i].APIKey) != match {
+					continue
 				}
+				if hasBase && strings.TrimSpace(h.cfg.GeminiKey[i].BaseURL) != base {
+					continue
+				}
+				matches = append(matches, i)
+			}
+			if len(matches) > 1 {
+				c.JSON(400, gin.H{"error": "multiple items match; index is required"})
+				return
+			}
+			if len(matches) == 1 {
+				targetIndex = matches[0]
 			}
 		}
 	}
@@ -235,14 +248,7 @@ func (h *Handler) PatchGeminiKey(c *gin.Context) {
 
 	entry := h.cfg.GeminiKey[targetIndex]
 	if body.Value.APIKey != nil {
-		trimmed := strings.TrimSpace(*body.Value.APIKey)
-		if trimmed == "" {
-			h.cfg.GeminiKey = append(h.cfg.GeminiKey[:targetIndex], h.cfg.GeminiKey[targetIndex+1:]...)
-			h.cfg.SanitizeGeminiKeys()
-			h.persistLocked(c)
-			return
-		}
-		entry.APIKey = trimmed
+		entry.APIKey = strings.TrimSpace(*body.Value.APIKey)
 	}
 	if len(body.Value.Weight) > 0 {
 		weight, errWeight := parseCredentialWeightPatch(body.Value.Weight)
@@ -276,6 +282,12 @@ func (h *Handler) PatchGeminiKey(c *gin.Context) {
 	if body.Value.RequestScopedErrors != nil {
 		entry.RequestScopedErrors = append([]config.RequestScopedErrorRule(nil), *body.Value.RequestScopedErrors...)
 	}
+	if entry.APIKey == "" && entry.BaseURL == "" {
+		h.cfg.GeminiKey = append(h.cfg.GeminiKey[:targetIndex], h.cfg.GeminiKey[targetIndex+1:]...)
+		h.cfg.SanitizeGeminiKeys()
+		h.persistLocked(c)
+		return
+	}
 	h.cfg.GeminiKey[targetIndex] = entry
 	h.cfg.SanitizeGeminiKeys()
 	h.persistLocked(c)
@@ -287,20 +299,25 @@ func (h *Handler) DeleteGeminiKey(c *gin.Context) {
 	if val := strings.TrimSpace(c.Query("api-key")); val != "" {
 		if baseRaw, okBase := c.GetQuery("base-url"); okBase {
 			base := strings.TrimSpace(baseRaw)
-			out := make([]config.GeminiKey, 0, len(h.cfg.GeminiKey))
-			for _, v := range h.cfg.GeminiKey {
-				if strings.TrimSpace(v.APIKey) == val && strings.TrimSpace(v.BaseURL) == base {
-					continue
+			matchIndex := -1
+			matchCount := 0
+			for i := range h.cfg.GeminiKey {
+				if strings.TrimSpace(h.cfg.GeminiKey[i].APIKey) == val && strings.TrimSpace(h.cfg.GeminiKey[i].BaseURL) == base {
+					matchIndex = i
+					matchCount++
 				}
-				out = append(out, v)
 			}
-			if len(out) != len(h.cfg.GeminiKey) {
-				h.cfg.GeminiKey = out
-				h.cfg.SanitizeGeminiKeys()
-				h.persistLocked(c)
-			} else {
+			if matchCount == 0 {
 				c.JSON(404, gin.H{"error": "item not found"})
+				return
 			}
+			if matchCount > 1 {
+				c.JSON(400, gin.H{"error": "multiple items match; index is required"})
+				return
+			}
+			h.cfg.GeminiKey = append(h.cfg.GeminiKey[:matchIndex], h.cfg.GeminiKey[matchIndex+1:]...)
+			h.cfg.SanitizeGeminiKeys()
+			h.persistLocked(c)
 			return
 		}
 
@@ -406,11 +423,24 @@ func (h *Handler) PatchInteractionsKey(c *gin.Context) {
 	if targetIndex == -1 && body.Match != nil {
 		match := strings.TrimSpace(*body.Match)
 		if match != "" {
+			baseRaw, hasBase := c.GetQuery("base-url")
+			base := strings.TrimSpace(baseRaw)
+			matches := make([]int, 0, 1)
 			for i := range h.cfg.InteractionsKey {
-				if h.cfg.InteractionsKey[i].APIKey == match {
-					targetIndex = i
-					break
+				if strings.TrimSpace(h.cfg.InteractionsKey[i].APIKey) != match {
+					continue
 				}
+				if hasBase && strings.TrimSpace(h.cfg.InteractionsKey[i].BaseURL) != base {
+					continue
+				}
+				matches = append(matches, i)
+			}
+			if len(matches) > 1 {
+				c.JSON(400, gin.H{"error": "multiple items match; index is required"})
+				return
+			}
+			if len(matches) == 1 {
+				targetIndex = matches[0]
 			}
 		}
 	}
@@ -421,14 +451,7 @@ func (h *Handler) PatchInteractionsKey(c *gin.Context) {
 
 	entry := h.cfg.InteractionsKey[targetIndex]
 	if body.Value.APIKey != nil {
-		trimmed := strings.TrimSpace(*body.Value.APIKey)
-		if trimmed == "" {
-			h.cfg.InteractionsKey = append(h.cfg.InteractionsKey[:targetIndex], h.cfg.InteractionsKey[targetIndex+1:]...)
-			h.cfg.SanitizeInteractionsKeys()
-			h.persistLocked(c)
-			return
-		}
-		entry.APIKey = trimmed
+		entry.APIKey = strings.TrimSpace(*body.Value.APIKey)
 	}
 	if len(body.Value.Weight) > 0 {
 		weight, errWeight := parseCredentialWeightPatch(body.Value.Weight)
@@ -462,6 +485,12 @@ func (h *Handler) PatchInteractionsKey(c *gin.Context) {
 	if body.Value.RequestScopedErrors != nil {
 		entry.RequestScopedErrors = append([]config.RequestScopedErrorRule(nil), *body.Value.RequestScopedErrors...)
 	}
+	if entry.APIKey == "" && entry.BaseURL == "" {
+		h.cfg.InteractionsKey = append(h.cfg.InteractionsKey[:targetIndex], h.cfg.InteractionsKey[targetIndex+1:]...)
+		h.cfg.SanitizeInteractionsKeys()
+		h.persistLocked(c)
+		return
+	}
 	h.cfg.InteractionsKey[targetIndex] = entry
 	h.cfg.SanitizeInteractionsKeys()
 	h.persistLocked(c)
@@ -473,20 +502,25 @@ func (h *Handler) DeleteInteractionsKey(c *gin.Context) {
 	if val := strings.TrimSpace(c.Query("api-key")); val != "" {
 		if baseRaw, okBase := c.GetQuery("base-url"); okBase {
 			base := strings.TrimSpace(baseRaw)
-			out := make([]config.GeminiKey, 0, len(h.cfg.InteractionsKey))
-			for _, v := range h.cfg.InteractionsKey {
-				if strings.TrimSpace(v.APIKey) == val && strings.TrimSpace(v.BaseURL) == base {
-					continue
+			matchIndex := -1
+			matchCount := 0
+			for i := range h.cfg.InteractionsKey {
+				if strings.TrimSpace(h.cfg.InteractionsKey[i].APIKey) == val && strings.TrimSpace(h.cfg.InteractionsKey[i].BaseURL) == base {
+					matchIndex = i
+					matchCount++
 				}
-				out = append(out, v)
 			}
-			if len(out) != len(h.cfg.InteractionsKey) {
-				h.cfg.InteractionsKey = out
-				h.cfg.SanitizeInteractionsKeys()
-				h.persistLocked(c)
-			} else {
+			if matchCount == 0 {
 				c.JSON(404, gin.H{"error": "item not found"})
+				return
 			}
+			if matchCount > 1 {
+				c.JSON(400, gin.H{"error": "multiple items match; index is required"})
+				return
+			}
+			h.cfg.InteractionsKey = append(h.cfg.InteractionsKey[:matchIndex], h.cfg.InteractionsKey[matchIndex+1:]...)
+			h.cfg.SanitizeInteractionsKeys()
+			h.persistLocked(c)
 			return
 		}
 
@@ -986,14 +1020,7 @@ func (h *Handler) PatchVertexCompatKey(c *gin.Context) {
 		entry.Prefix = strings.TrimSpace(*body.Value.Prefix)
 	}
 	if body.Value.BaseURL != nil {
-		trimmed := strings.TrimSpace(*body.Value.BaseURL)
-		if trimmed == "" {
-			h.cfg.VertexCompatAPIKey = append(h.cfg.VertexCompatAPIKey[:targetIndex], h.cfg.VertexCompatAPIKey[targetIndex+1:]...)
-			h.cfg.SanitizeVertexCompatKeys()
-			h.persistLocked(c)
-			return
-		}
-		entry.BaseURL = trimmed
+		entry.BaseURL = strings.TrimSpace(*body.Value.BaseURL)
 	}
 	if body.Value.ProxyURL != nil {
 		entry.ProxyURL = strings.TrimSpace(*body.Value.ProxyURL)
@@ -1255,6 +1282,103 @@ func (h *Handler) DeleteOAuthModelAlias(c *gin.Context) {
 	// marker survives config reload and prevents SanitizeOAuthModelAlias from
 	// re-injecting default aliases (fixes #222).
 	h.cfg.OAuthModelAlias[channel] = nil
+	h.persist(c)
+}
+
+// oauth-request-scoped-errors: map[string][]RequestScopedErrorRule
+func (h *Handler) GetOAuthRequestScopedErrors(c *gin.Context) {
+	c.JSON(200, gin.H{"oauth-request-scoped-errors": sanitizedOAuthRequestScopedErrors(h.cfg.OAuthRequestScopedErrors)})
+}
+
+func (h *Handler) PutOAuthRequestScopedErrors(c *gin.Context) {
+	data, err := c.GetRawData()
+	if err != nil {
+		c.JSON(400, gin.H{"error": "failed to read body"})
+		return
+	}
+	var entries map[string][]config.RequestScopedErrorRule
+	if err = json.Unmarshal(data, &entries); err != nil {
+		var wrapper struct {
+			Items map[string][]config.RequestScopedErrorRule `json:"items"`
+		}
+		if err2 := json.Unmarshal(data, &wrapper); err2 != nil {
+			c.JSON(400, gin.H{"error": "invalid body"})
+			return
+		}
+		entries = wrapper.Items
+	}
+	h.cfg.OAuthRequestScopedErrors = sanitizedOAuthRequestScopedErrors(entries)
+	h.persist(c)
+}
+
+func (h *Handler) PatchOAuthRequestScopedErrors(c *gin.Context) {
+	var body struct {
+		Provider *string                         `json:"provider"`
+		Channel  *string                         `json:"channel"`
+		Rules    []config.RequestScopedErrorRule `json:"rules"`
+	}
+	if errBindJSON := c.ShouldBindJSON(&body); errBindJSON != nil {
+		c.JSON(400, gin.H{"error": "invalid body"})
+		return
+	}
+	channelRaw := ""
+	if body.Channel != nil {
+		channelRaw = *body.Channel
+	} else if body.Provider != nil {
+		channelRaw = *body.Provider
+	}
+	channel := strings.ToLower(strings.TrimSpace(channelRaw))
+	if channel == "" {
+		c.JSON(400, gin.H{"error": "invalid channel"})
+		return
+	}
+
+	normalizedMap := sanitizedOAuthRequestScopedErrors(map[string][]config.RequestScopedErrorRule{channel: body.Rules})
+	normalized := normalizedMap[channel]
+	if len(normalized) == 0 {
+		if h.cfg.OAuthRequestScopedErrors == nil {
+			c.JSON(404, gin.H{"error": "channel not found"})
+			return
+		}
+		if _, ok := h.cfg.OAuthRequestScopedErrors[channel]; !ok {
+			c.JSON(404, gin.H{"error": "channel not found"})
+			return
+		}
+		delete(h.cfg.OAuthRequestScopedErrors, channel)
+		if len(h.cfg.OAuthRequestScopedErrors) == 0 {
+			h.cfg.OAuthRequestScopedErrors = nil
+		}
+		h.persist(c)
+		return
+	}
+	if h.cfg.OAuthRequestScopedErrors == nil {
+		h.cfg.OAuthRequestScopedErrors = make(map[string][]config.RequestScopedErrorRule)
+	}
+	h.cfg.OAuthRequestScopedErrors[channel] = normalized
+	h.persist(c)
+}
+
+func (h *Handler) DeleteOAuthRequestScopedErrors(c *gin.Context) {
+	channel := strings.ToLower(strings.TrimSpace(c.Query("channel")))
+	if channel == "" {
+		channel = strings.ToLower(strings.TrimSpace(c.Query("provider")))
+	}
+	if channel == "" {
+		c.JSON(400, gin.H{"error": "missing channel"})
+		return
+	}
+	if h.cfg.OAuthRequestScopedErrors == nil {
+		c.JSON(404, gin.H{"error": "channel not found"})
+		return
+	}
+	if _, ok := h.cfg.OAuthRequestScopedErrors[channel]; !ok {
+		c.JSON(404, gin.H{"error": "channel not found"})
+		return
+	}
+	delete(h.cfg.OAuthRequestScopedErrors, channel)
+	if len(h.cfg.OAuthRequestScopedErrors) == 0 {
+		h.cfg.OAuthRequestScopedErrors = nil
+	}
 	h.persist(c)
 }
 
@@ -1810,298 +1934,24 @@ func sanitizedOAuthModelAlias(entries map[string][]config.OAuthModelAlias) map[s
 	return cfg.OAuthModelAlias
 }
 
-// GetAmpCode returns the complete ampcode configuration.
-func (h *Handler) GetAmpCode(c *gin.Context) {
-	if h == nil || h.cfg == nil {
-		c.JSON(200, gin.H{"ampcode": config.AmpCode{}})
-		return
-	}
-	c.JSON(200, gin.H{"ampcode": h.cfg.AmpCode})
-}
-
-// GetAmpUpstreamURL returns the ampcode upstream URL.
-func (h *Handler) GetAmpUpstreamURL(c *gin.Context) {
-	if h == nil || h.cfg == nil {
-		c.JSON(200, gin.H{"upstream-url": ""})
-		return
-	}
-	c.JSON(200, gin.H{"upstream-url": h.cfg.AmpCode.UpstreamURL})
-}
-
-// PutAmpUpstreamURL updates the ampcode upstream URL.
-func (h *Handler) PutAmpUpstreamURL(c *gin.Context) {
-	h.updateStringField(c, func(v string) { h.cfg.AmpCode.UpstreamURL = strings.TrimSpace(v) })
-}
-
-// DeleteAmpUpstreamURL clears the ampcode upstream URL.
-func (h *Handler) DeleteAmpUpstreamURL(c *gin.Context) {
-	h.cfg.AmpCode.UpstreamURL = ""
-	h.persist(c)
-}
-
-// GetAmpUpstreamAPIKey returns the ampcode upstream API key.
-func (h *Handler) GetAmpUpstreamAPIKey(c *gin.Context) {
-	if h == nil || h.cfg == nil {
-		c.JSON(200, gin.H{"upstream-api-key": ""})
-		return
-	}
-	c.JSON(200, gin.H{"upstream-api-key": h.cfg.AmpCode.UpstreamAPIKey})
-}
-
-// PutAmpUpstreamAPIKey updates the ampcode upstream API key.
-func (h *Handler) PutAmpUpstreamAPIKey(c *gin.Context) {
-	h.updateStringField(c, func(v string) { h.cfg.AmpCode.UpstreamAPIKey = strings.TrimSpace(v) })
-}
-
-// DeleteAmpUpstreamAPIKey clears the ampcode upstream API key.
-func (h *Handler) DeleteAmpUpstreamAPIKey(c *gin.Context) {
-	h.cfg.AmpCode.UpstreamAPIKey = ""
-	h.persist(c)
-}
-
-// GetAmpRestrictManagementToLocalhost returns the localhost restriction setting.
-func (h *Handler) GetAmpRestrictManagementToLocalhost(c *gin.Context) {
-	if h == nil || h.cfg == nil {
-		c.JSON(200, gin.H{"restrict-management-to-localhost": true})
-		return
-	}
-	c.JSON(200, gin.H{"restrict-management-to-localhost": h.cfg.AmpCode.RestrictManagementToLocalhost})
-}
-
-// PutAmpRestrictManagementToLocalhost updates the localhost restriction setting.
-func (h *Handler) PutAmpRestrictManagementToLocalhost(c *gin.Context) {
-	h.updateBoolField(c, func(v bool) { h.cfg.AmpCode.RestrictManagementToLocalhost = v })
-}
-
-// GetAmpModelMappings returns the ampcode model mappings.
-func (h *Handler) GetAmpModelMappings(c *gin.Context) {
-	if h == nil || h.cfg == nil {
-		c.JSON(200, gin.H{"model-mappings": []config.AmpModelMapping{}})
-		return
-	}
-	c.JSON(200, gin.H{"model-mappings": h.cfg.AmpCode.ModelMappings})
-}
-
-// PutAmpModelMappings replaces all ampcode model mappings.
-func (h *Handler) PutAmpModelMappings(c *gin.Context) {
-	var body struct {
-		Value []config.AmpModelMapping `json:"value"`
-	}
-	if err := c.ShouldBindJSON(&body); err != nil {
-		c.JSON(400, gin.H{"error": "invalid body"})
-		return
-	}
-	h.cfg.AmpCode.ModelMappings = body.Value
-	h.persist(c)
-}
-
-// PatchAmpModelMappings adds or updates model mappings.
-func (h *Handler) PatchAmpModelMappings(c *gin.Context) {
-	var body struct {
-		Value []config.AmpModelMapping `json:"value"`
-	}
-	if err := c.ShouldBindJSON(&body); err != nil {
-		c.JSON(400, gin.H{"error": "invalid body"})
-		return
-	}
-
-	existing := make(map[string]int)
-	for i, m := range h.cfg.AmpCode.ModelMappings {
-		existing[strings.TrimSpace(m.From)] = i
-	}
-
-	for _, newMapping := range body.Value {
-		from := strings.TrimSpace(newMapping.From)
-		if idx, ok := existing[from]; ok {
-			h.cfg.AmpCode.ModelMappings[idx] = newMapping
-		} else {
-			h.cfg.AmpCode.ModelMappings = append(h.cfg.AmpCode.ModelMappings, newMapping)
-			existing[from] = len(h.cfg.AmpCode.ModelMappings) - 1
-		}
-	}
-	h.persist(c)
-}
-
-// DeleteAmpModelMappings removes specified model mappings by "from" field.
-func (h *Handler) DeleteAmpModelMappings(c *gin.Context) {
-	var body struct {
-		Value []string `json:"value"`
-	}
-	if err := c.ShouldBindJSON(&body); err != nil || len(body.Value) == 0 {
-		h.cfg.AmpCode.ModelMappings = nil
-		h.persist(c)
-		return
-	}
-
-	toRemove := make(map[string]bool)
-	for _, from := range body.Value {
-		toRemove[strings.TrimSpace(from)] = true
-	}
-
-	newMappings := make([]config.AmpModelMapping, 0, len(h.cfg.AmpCode.ModelMappings))
-	for _, m := range h.cfg.AmpCode.ModelMappings {
-		if !toRemove[strings.TrimSpace(m.From)] {
-			newMappings = append(newMappings, m)
-		}
-	}
-	h.cfg.AmpCode.ModelMappings = newMappings
-	h.persist(c)
-}
-
-// GetAmpForceModelMappings returns whether model mappings are forced.
-func (h *Handler) GetAmpForceModelMappings(c *gin.Context) {
-	if h == nil || h.cfg == nil {
-		c.JSON(200, gin.H{"force-model-mappings": false})
-		return
-	}
-	c.JSON(200, gin.H{"force-model-mappings": h.cfg.AmpCode.ForceModelMappings})
-}
-
-// PutAmpForceModelMappings updates the force model mappings setting.
-func (h *Handler) PutAmpForceModelMappings(c *gin.Context) {
-	h.updateBoolField(c, func(v bool) { h.cfg.AmpCode.ForceModelMappings = v })
-}
-
-// GetAmpUpstreamAPIKeys returns the ampcode upstream API keys mapping.
-func (h *Handler) GetAmpUpstreamAPIKeys(c *gin.Context) {
-	if h == nil || h.cfg == nil {
-		c.JSON(200, gin.H{"upstream-api-keys": []config.AmpUpstreamAPIKeyEntry{}})
-		return
-	}
-	c.JSON(200, gin.H{"upstream-api-keys": h.cfg.AmpCode.UpstreamAPIKeys})
-}
-
-// PutAmpUpstreamAPIKeys replaces all ampcode upstream API keys mappings.
-func (h *Handler) PutAmpUpstreamAPIKeys(c *gin.Context) {
-	var body struct {
-		Value []config.AmpUpstreamAPIKeyEntry `json:"value"`
-	}
-	if err := c.ShouldBindJSON(&body); err != nil {
-		c.JSON(400, gin.H{"error": "invalid body"})
-		return
-	}
-	normalized := normalizeAmpUpstreamAPIKeyEntries(body.Value)
-	h.cfg.AmpCode.UpstreamAPIKeys = normalized
-	h.persist(c)
-}
-
-// PatchAmpUpstreamAPIKeys adds or updates upstream API keys entries.
-// Matching is done by upstream-api-key value.
-func (h *Handler) PatchAmpUpstreamAPIKeys(c *gin.Context) {
-	var body struct {
-		Value []config.AmpUpstreamAPIKeyEntry `json:"value"`
-	}
-	if err := c.ShouldBindJSON(&body); err != nil {
-		c.JSON(400, gin.H{"error": "invalid body"})
-		return
-	}
-
-	existing := make(map[string]int)
-	for i, entry := range h.cfg.AmpCode.UpstreamAPIKeys {
-		existing[strings.TrimSpace(entry.UpstreamAPIKey)] = i
-	}
-
-	for _, newEntry := range body.Value {
-		upstreamKey := strings.TrimSpace(newEntry.UpstreamAPIKey)
-		if upstreamKey == "" {
-			continue
-		}
-		normalizedEntry := config.AmpUpstreamAPIKeyEntry{
-			UpstreamAPIKey: upstreamKey,
-			APIKeys:        normalizeAPIKeysList(newEntry.APIKeys),
-		}
-		if idx, ok := existing[upstreamKey]; ok {
-			h.cfg.AmpCode.UpstreamAPIKeys[idx] = normalizedEntry
-		} else {
-			h.cfg.AmpCode.UpstreamAPIKeys = append(h.cfg.AmpCode.UpstreamAPIKeys, normalizedEntry)
-			existing[upstreamKey] = len(h.cfg.AmpCode.UpstreamAPIKeys) - 1
-		}
-	}
-	h.persist(c)
-}
-
-// DeleteAmpUpstreamAPIKeys removes specified upstream API keys entries.
-// Body must be JSON: {"value": ["<upstream-api-key>", ...]}.
-// If "value" is an empty array, clears all entries.
-// If JSON is invalid or "value" is missing/null, returns 400 and does not persist any change.
-func (h *Handler) DeleteAmpUpstreamAPIKeys(c *gin.Context) {
-	var body struct {
-		Value []string `json:"value"`
-	}
-	if err := c.ShouldBindJSON(&body); err != nil {
-		c.JSON(400, gin.H{"error": "invalid body"})
-		return
-	}
-
-	if body.Value == nil {
-		c.JSON(400, gin.H{"error": "missing value"})
-		return
-	}
-
-	if len(body.Value) == 0 {
-		h.cfg.AmpCode.UpstreamAPIKeys = nil
-		h.persist(c)
-		return
-	}
-
-	toRemove := make(map[string]bool)
-	for _, key := range body.Value {
-		trimmed := strings.TrimSpace(key)
-		if trimmed == "" {
-			continue
-		}
-		toRemove[trimmed] = true
-	}
-	if len(toRemove) == 0 {
-		c.JSON(400, gin.H{"error": "empty value"})
-		return
-	}
-
-	newEntries := make([]config.AmpUpstreamAPIKeyEntry, 0, len(h.cfg.AmpCode.UpstreamAPIKeys))
-	for _, entry := range h.cfg.AmpCode.UpstreamAPIKeys {
-		if !toRemove[strings.TrimSpace(entry.UpstreamAPIKey)] {
-			newEntries = append(newEntries, entry)
-		}
-	}
-	h.cfg.AmpCode.UpstreamAPIKeys = newEntries
-	h.persist(c)
-}
-
-func normalizeAmpUpstreamAPIKeyEntries(entries []config.AmpUpstreamAPIKeyEntry) []config.AmpUpstreamAPIKeyEntry {
+func sanitizedOAuthRequestScopedErrors(entries map[string][]config.RequestScopedErrorRule) map[string][]config.RequestScopedErrorRule {
 	if len(entries) == 0 {
 		return nil
 	}
-	out := make([]config.AmpUpstreamAPIKeyEntry, 0, len(entries))
-	for _, entry := range entries {
-		upstreamKey := strings.TrimSpace(entry.UpstreamAPIKey)
-		if upstreamKey == "" {
+	copied := make(map[string][]config.RequestScopedErrorRule, len(entries))
+	for channel, rules := range entries {
+		if len(rules) == 0 {
 			continue
 		}
-		apiKeys := normalizeAPIKeysList(entry.APIKeys)
-		out = append(out, config.AmpUpstreamAPIKeyEntry{
-			UpstreamAPIKey: upstreamKey,
-			APIKeys:        apiKeys,
-		})
+		copied[channel] = append([]config.RequestScopedErrorRule(nil), rules...)
 	}
-	if len(out) == 0 {
+	if len(copied) == 0 {
 		return nil
 	}
-	return out
-}
-
-func normalizeAPIKeysList(keys []string) []string {
-	if len(keys) == 0 {
+	cfg := config.Config{OAuthRequestScopedErrors: copied}
+	cfg.SanitizeOAuthRequestScopedErrors()
+	if len(cfg.OAuthRequestScopedErrors) == 0 {
 		return nil
 	}
-	out := make([]string, 0, len(keys))
-	for _, k := range keys {
-		trimmed := strings.TrimSpace(k)
-		if trimmed != "" {
-			out = append(out, trimmed)
-		}
-	}
-	if len(out) == 0 {
-		return nil
-	}
-	return out
+	return cfg.OAuthRequestScopedErrors
 }
