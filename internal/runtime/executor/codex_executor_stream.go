@@ -283,6 +283,29 @@ func (e *CodexExecutor) ExecuteStream(ctx context.Context, auth *cliproxyauth.Au
 		close(out)
 		return &cliproxyexecutor.StreamResult{Headers: httpResp.Header.Clone(), Chunks: out}, nil
 	}
+	requireCompletedEvent := e.cfg != nil && e.cfg.Streaming.RequireCompletedEvent
+	bufferLimit := codexCompletedEventBufferLimit(e.cfg)
+	bufferedBytes := int64(0)
+	sendChunk := func(chunk cliproxyexecutor.StreamChunk) bool {
+		if requireCompletedEvent && chunk.Err == nil {
+			bufferedBytes += int64(len(chunk.Payload))
+			if bufferedBytes > bufferLimit {
+				err := newCodexCompletedEventBufferError(bufferLimit)
+				helps.RecordAPIResponseError(ctx, e.cfg, err)
+				reporter.PublishFailure(ctx, err)
+				return false
+			}
+			bufferedChunks = append(bufferedChunks, append([]byte(nil), chunk.Payload...))
+			return true
+		}
+		select { case out <- chunk: return true; case <-ctx.Done(): return false }
+	}
+	flushBuffered := func() bool {
+		for _, payload := range bufferedChunks {
+			select { case out <- cliproxyexecutor.StreamChunk{Payload: payload}: case <-ctx.Done(): return false }
+		}
+		return true
+	}
 
 	go func() {
 		defer close(out)

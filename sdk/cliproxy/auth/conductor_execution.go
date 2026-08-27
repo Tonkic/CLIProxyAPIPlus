@@ -398,7 +398,6 @@ func (m *Manager) executeMixedOnce(ctx context.Context, providers []string, req 
 			var errIntercept error
 			execReq, execOpts, errIntercept = applyRequestAfterAuthInterceptor(execCtx, executor, provider, execReq, execOpts, requestedModelAliasFromOptions(execOpts, routeModel))
 			if errIntercept != nil {
-				releaseConcurrency()
 				return cliproxyexecutor.Response{}, errIntercept
 			}
 			if !restoreExecutionModel {
@@ -409,7 +408,6 @@ func (m *Manager) executeMixedOnce(ctx context.Context, providers []string, req 
 			durationExec := time.Since(startExec)
 			if errExec != nil {
 				if errCtx := execCtx.Err(); errCtx != nil {
-					releaseConcurrency()
 					return cliproxyexecutor.Response{}, errCtx
 				}
 				refreshCtx := newUpstreamAttemptContext(execCtx)
@@ -423,7 +421,6 @@ func (m *Manager) executeMixedOnce(ctx context.Context, providers []string, req 
 					if errExec != nil {
 						warnLogUpstreamFailure(execCtx, entry, provider, upstreamModel, auth, durationRetry, errExec)
 						if errCtx := execCtx.Err(); errCtx != nil {
-							releaseConcurrency()
 							return cliproxyexecutor.Response{}, errCtx
 						}
 					}
@@ -431,7 +428,6 @@ func (m *Manager) executeMixedOnce(ctx context.Context, providers []string, req 
 					warnLogUpstreamFailure(execCtx, entry, provider, upstreamModel, auth, durationExec, errExec)
 				}
 			}
-			releaseConcurrency()
 			if errCancel := claudeOAuthRequestCancellation(execCtx, auth, errExec); errCancel != nil {
 				return cliproxyexecutor.Response{}, errCancel
 			}
@@ -580,7 +576,6 @@ func (m *Manager) executeCountMixedOnce(ctx context.Context, providers []string,
 			var errIntercept error
 			execReq, execOpts, errIntercept = applyRequestAfterAuthInterceptor(execCtx, executor, provider, execReq, execOpts, requestedModelAliasFromOptions(execOpts, routeModel))
 			if errIntercept != nil {
-				releaseConcurrency()
 				return cliproxyexecutor.Response{}, errIntercept
 			}
 			if !restoreExecutionModel {
@@ -591,7 +586,6 @@ func (m *Manager) executeCountMixedOnce(ctx context.Context, providers []string,
 			durationExec := time.Since(startExec)
 			if errExec != nil {
 				if errCtx := execCtx.Err(); errCtx != nil {
-					releaseConcurrency()
 					return cliproxyexecutor.Response{}, errCtx
 				}
 				refreshCtx := newUpstreamAttemptContext(execCtx)
@@ -605,7 +599,6 @@ func (m *Manager) executeCountMixedOnce(ctx context.Context, providers []string,
 					if errExec != nil {
 						warnLogUpstreamFailure(execCtx, entry, provider, upstreamModel, auth, durationRetry, errExec)
 						if errCtx := execCtx.Err(); errCtx != nil {
-							releaseConcurrency()
 							return cliproxyexecutor.Response{}, errCtx
 						}
 					}
@@ -613,7 +606,6 @@ func (m *Manager) executeCountMixedOnce(ctx context.Context, providers []string,
 					warnLogUpstreamFailure(execCtx, entry, provider, upstreamModel, auth, durationExec, errExec)
 				}
 			}
-			releaseConcurrency()
 			if errCancel := claudeOAuthRequestCancellation(execCtx, auth, errExec); errCancel != nil {
 				return cliproxyexecutor.Response{}, errCancel
 			}

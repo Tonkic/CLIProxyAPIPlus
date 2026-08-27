@@ -395,7 +395,7 @@ func (m *Manager) executeStreamWithModelPool(ctx context.Context, executor Provi
 						streamResult = &cliproxyexecutor.StreamResult{}
 					} else {
 						streamResult = retryStream
-						buffered, closed, bootstrapErr = readStreamBootstrap(ctx, streamResult.Chunks)
+						buffered, closed, bootstrapErr = readStreamBootstrap(ctx, provider, streamResult.Chunks)
 						if bootstrapErr != nil {
 							warnLogUpstreamFailure(ctx, entry, provider, execModel, auth, time.Since(startRetry), bootstrapErr)
 						}
