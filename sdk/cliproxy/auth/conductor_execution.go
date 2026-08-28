@@ -387,6 +387,12 @@ func (m *Manager) executeMixedOnce(ctx context.Context, providers []string, req 
 		var authErr error
 		didRefreshOnUnauthorized := false
 		for _, upstreamModel := range models {
+			releaseConcurrency, acquired := m.tryAcquireAuthConcurrency(auth)
+			if !acquired {
+				delete(attempted, auth.ID)
+				authErr = authConcurrencyError(auth)
+				break
+			}
 			execCtx = newUpstreamAttemptContext(execCtx)
 			resultModel := m.stateModelForExecution(auth, routeModel, upstreamModel, pooled)
 			execReq := attachResolvedAPIKeyModelInfo(routing, req, auth, routeModel, upstreamModel)
@@ -398,6 +404,7 @@ func (m *Manager) executeMixedOnce(ctx context.Context, providers []string, req 
 			var errIntercept error
 			execReq, execOpts, errIntercept = applyRequestAfterAuthInterceptor(execCtx, executor, provider, execReq, execOpts, requestedModelAliasFromOptions(execOpts, routeModel))
 			if errIntercept != nil {
+				releaseConcurrency()
 				return cliproxyexecutor.Response{}, errIntercept
 			}
 			if !restoreExecutionModel {
@@ -408,6 +415,7 @@ func (m *Manager) executeMixedOnce(ctx context.Context, providers []string, req 
 			durationExec := time.Since(startExec)
 			if errExec != nil {
 				if errCtx := execCtx.Err(); errCtx != nil {
+					releaseConcurrency()
 					return cliproxyexecutor.Response{}, errCtx
 				}
 				refreshCtx := newUpstreamAttemptContext(execCtx)
@@ -421,6 +429,7 @@ func (m *Manager) executeMixedOnce(ctx context.Context, providers []string, req 
 					if errExec != nil {
 						warnLogUpstreamFailure(execCtx, entry, provider, upstreamModel, auth, durationRetry, errExec)
 						if errCtx := execCtx.Err(); errCtx != nil {
+							releaseConcurrency()
 							return cliproxyexecutor.Response{}, errCtx
 						}
 					}
@@ -428,6 +437,7 @@ func (m *Manager) executeMixedOnce(ctx context.Context, providers []string, req 
 					warnLogUpstreamFailure(execCtx, entry, provider, upstreamModel, auth, durationExec, errExec)
 				}
 			}
+			releaseConcurrency()
 			if errCancel := claudeOAuthRequestCancellation(execCtx, auth, errExec); errCancel != nil {
 				return cliproxyexecutor.Response{}, errCancel
 			}

@@ -1546,6 +1546,9 @@ func (m *Manager) pickNextMixedLegacy(ctx context.Context, providers []string, m
 	opts.EnsureMetadata()
 	opts.Metadata[cliproxyexecutor.SessionAffinityProviderMetadataKey] = "mixed"
 	opts.Metadata[cliproxyexecutor.SessionAffinityModelMetadataKey] = selectionArgForSelector(m.selector, model)
+	// Make tried credentials visible to the session-affinity selector too. A
+	// sticky binding that is at its concurrency limit must not be selected again.
+	opts = withHomeExcludedAuthIDs(opts, tried)
 
 	pinnedAuthID := pinnedAuthIDFromMetadata(opts.Metadata)
 	eligibility := authSelectionEligibilityForRequest(ctx, opts)
