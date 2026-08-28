@@ -26,8 +26,11 @@ func forEachSourceFile(t *testing.T, root string, visit func(rel string, data []
 			return err
 		}
 		if d.IsDir() {
+			if strings.HasPrefix(d.Name(), ".") {
+				return filepath.SkipDir
+			}
 			switch d.Name() {
-			case ".git", "vendor", "node_modules", "testdata":
+			case "vendor", "node_modules", "testdata":
 				return filepath.SkipDir
 			}
 			return nil
@@ -87,7 +90,7 @@ func TestNoInPlaceSJSONWrites(t *testing.T) {
 // new code rather than a proof of absence.
 var inPlaceByteWritePatterns = []*regexp.Regexp{
 	regexp.MustCompile(`\bcopy\([a-zA-Z_][A-Za-z0-9_.]*\[`),
-	regexp.MustCompile(`^\s*[a-zA-Z_][A-Za-z0-9_.]*\[[a-zA-Z0-9_]+\] = 0$`),
+	regexp.MustCompile(`^\s*[a-zA-Z_][A-Za-z0-9_.]*\[[a-zA-Z0-9_]+\] = 0\r?$`),
 }
 
 // reviewedInPlaceByteWrites records the reviewed in-place byte writes per file.
@@ -106,7 +109,6 @@ var reviewedInPlaceByteWrites = map[string]reviewedInPlaceByteWrite{
 	"internal/runtime/executor/claude_executor_request.go":  {2, "shifts []string headers to insert a part; no byte of any payload is rewritten"},
 	"internal/runtime/executor/helps/claude_mcp_alias.go":   {1, "copies an HMAC sum into a local fixed-size digest array"},
 	"internal/client/codex/live/tcp_proxy.go":               {1, "copies header and payload into a freshly allocated frame"},
-	"internal/auth/cursor/proto/connect.go":                 {1, "copies payload into a freshly allocated Connect frame; the caller's buffer is never modified"},
 	"internal/home/client.go":                               {1, "zeroes a secret buffer after json.Unmarshal has copied every value out"},
 	"internal/pluginstore/auth.go":                          {1, "zeroes a locally built credential buffer after base64 encoding copied it out"},
 }
@@ -119,11 +121,11 @@ func TestInPlaceByteWritesAreReviewed(t *testing.T) {
 	root := repoRoot(t)
 	found := make(map[string][]string)
 	forEachSourceFile(t, root, func(rel string, data []byte) {
-		for _, rawLine := range strings.Split(string(data), "\n") {
-			line := strings.TrimSpace(rawLine)
+		normalized := strings.ReplaceAll(string(data), "\r\n", "\n")
+		for _, line := range strings.Split(normalized, "\n") {
 			for _, pattern := range inPlaceByteWritePatterns {
 				if pattern.MatchString(line) {
-					found[rel] = append(found[rel], line)
+					found[rel] = append(found[rel], strings.TrimSpace(line))
 				}
 			}
 		}
@@ -162,5 +164,38 @@ func repoRoot(t *testing.T) string {
 			t.Fatal("go.mod not found above working directory")
 		}
 		dir = parent
+	}
+}
+
+func TestInPlaceByteWritePatterns_CRLF(t *testing.T) {
+	crlfLine := "\traw[index] = 0\r"
+	matched := false
+	for _, pattern := range inPlaceByteWritePatterns {
+		if pattern.MatchString(crlfLine) {
+			matched = true
+			break
+		}
+	}
+	if !matched {
+		t.Fatalf("inPlaceByteWritePatterns failed to match CRLF line %q", crlfLine)
+	}
+}
+
+func TestForEachSourceFile_SkipsDotDirs(t *testing.T) {
+	tempDir := t.TempDir()
+	dotDir := filepath.Join(tempDir, ".gomodcache")
+	if err := os.MkdirAll(dotDir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	sampleFile := filepath.Join(dotDir, "sample.go")
+	if err := os.WriteFile(sampleFile, []byte("package sample\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	var visited []string
+	forEachSourceFile(t, tempDir, func(rel string, data []byte) {
+		visited = append(visited, rel)
+	})
+	if len(visited) > 0 {
+		t.Fatalf("forEachSourceFile should have skipped dot directories, but visited: %v", visited)
 	}
 }

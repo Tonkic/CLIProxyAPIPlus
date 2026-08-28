@@ -81,8 +81,16 @@ func (h *BaseAPIHandler) executeWithAuthManagerFormats(ctx context.Context, entr
 		Headers:                     modelExecutionHeaders(ctx, execOptions.Headers),
 		Query:                       modelExecutionQuery(ctx, execOptions.Query),
 		RequestAfterAuthInterceptor: h.requestAfterAuthInterceptor(afterAuthCapture, lifecycle.requestID(), execOptions.SkipInterceptorPluginID),
+		WebSocketResponseObserver:   h.webSocketResponseObserver(lifecycle.requestID(), execOptions.SkipInterceptorPluginID),
 	}
 	opts.Metadata = reqMeta
+	// Non-streaming HTTP requests can safely fail over before any downstream
+	// bytes are written. Ask the auth manager to exhaust all upstream
+	// credentials regardless of the returned HTTP status.
+	if opts.Metadata == nil {
+		opts.Metadata = make(map[string]any)
+	}
+	opts.Metadata[coreexecutor.RetryAllUpstreamErrorsMetadataKey] = true
 	var interceptErr *interfaces.ErrorMessage
 	req, opts, interceptErr = h.applyRequestInterceptorsBeforeAuth(ctx, entryProtocol, originalRequestedModel, lifecycle.requestID(), req, opts, execOptions.SkipInterceptorPluginID)
 	if interceptErr != nil {
@@ -145,6 +153,7 @@ func (h *BaseAPIHandler) executeCountWithAuthManager(ctx context.Context, handle
 		Headers:                     modelExecutionHeaders(ctx, execOptions.Headers),
 		Query:                       modelExecutionQuery(ctx, execOptions.Query),
 		RequestAfterAuthInterceptor: h.requestAfterAuthInterceptor(afterAuthCapture, lifecycle.requestID(), execOptions.SkipInterceptorPluginID),
+		WebSocketResponseObserver:   h.webSocketResponseObserver(lifecycle.requestID(), execOptions.SkipInterceptorPluginID),
 	}
 	opts.Metadata = reqMeta
 	var interceptErr *interfaces.ErrorMessage
@@ -264,14 +273,15 @@ func (h *BaseAPIHandler) pluginExecutorRequest(ctx context.Context, entryProtoco
 	}
 	req := coreexecutor.Request{Model: modelName, Payload: payload}
 	opts := coreexecutor.Options{
-		Stream:          stream,
-		Alt:             alt,
-		OriginalRequest: rawJSON,
-		SourceFormat:    sdktranslator.FromString(entryProtocol),
-		ResponseFormat:  sdktranslator.FromString(responseProtocol),
-		Headers:         modelExecutionHeaders(ctx, execOptions.Headers),
-		Query:           modelExecutionQuery(ctx, execOptions.Query),
-		Metadata:        reqMeta,
+		Stream:                    stream,
+		Alt:                       alt,
+		OriginalRequest:           rawJSON,
+		SourceFormat:              sdktranslator.FromString(entryProtocol),
+		ResponseFormat:            sdktranslator.FromString(responseProtocol),
+		Headers:                   modelExecutionHeaders(ctx, execOptions.Headers),
+		Query:                     modelExecutionQuery(ctx, execOptions.Query),
+		WebSocketResponseObserver: h.webSocketResponseObserver("", execOptions.SkipInterceptorPluginID),
+		Metadata:                  reqMeta,
 	}
 	return req, opts
 }

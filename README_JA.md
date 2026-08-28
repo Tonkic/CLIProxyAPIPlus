@@ -1,4 +1,4 @@
-# CLIProxyAPI Plus
+# CLI Proxy API
 
 [English](README.md) | [中文](README_CN.md) | 日本語
 
@@ -54,10 +54,6 @@ PackyCodeは当ソフトウェアのユーザーに特別割引を提供して�
 <tr>
 <td width="180"><a href="https://www.aicodemirror.ai/register?invitecode=TJNAIF"><img src="./assets/aicodemirror.png" alt="AICodeMirror" width="150"></a></td>
 <td>AICodeMirrorのスポンサーシップに感謝します！AICodeMirrorはClaude Code / Codex / Gemini向けの公式高安定性リレーサービスを提供しており、エンタープライズグレードの同時接続、迅速な請求書発行、24時間365日の専任技術サポートを備えています。Claude Code / Codex / Geminiの公式チャネルが元の価格の38% / 2% / 9%で利用でき、チャージ時にはさらに割引があります！CLIProxyAPIユーザー向けの特別特典：<a href="https://www.aicodemirror.ai/register?invitecode=TJNAIF">こちらのリンク</a>から登録すると、初回チャージが20%割引になり、エンタープライズのお客様は最大25%割引を受けられます！</td>
-</tr>
-<tr>
-<td width="180"><a href="https://shop.bmoplus.com/?utm_source=github"><img src="./assets/bmoplus.png" alt="BmoPlus" width="150"></a></td>
-<td>本プロジェクトにご支援いただいた BmoPlus に感謝いたします！BmoPlusは、AIサブスクリプションのヘビーユーザー向けに特化した信頼性の高いAIアカウントサービスプロバイダーであり、安定した ChatGPT Plus / ChatGPT Pro (完全保証) / Claude Pro / Super Grok / Gemini Pro の公式代行チャージおよび即納アカウントを提供しています。こちらの<a href="https://shop.bmoplus.com/?utm_source=github">BmoPlus AIアカウント専門店/代行チャージ</a>経由でご登録・ご注文いただいたユーザー様は、GPTを <b>公式サイト価格の約1割（90% OFF）</b> という驚異的な価格でご利用いただけます！</td>
 </tr>
 <tr>
 <td width="180"><a href="https://apikey.fun/register?aff=CLIProxyAPI"><img src="./assets/apikey.png" alt="APIKEY.FUN" width="150"></a></td>
@@ -129,170 +125,172 @@ PackyCodeは当ソフトウェアのユーザーに特別割引を提供して�
 - 設定によるOpenAI互換アップストリームプロバイダー（例：OpenRouter）
 - プロキシ埋め込み用の再利用可能なGo SDK（`docs/sdk-usage.md`を参照）
 
-- `router-for-me/CLIProxyAPI`: 上流のプロキシサーバー本体。
-- `Tonkic/CLIProxyAPIPlus`: 追加 provider、ログイン機能、配布パッケージを含む Plus fork。
-- `seakee/CPA-Manager-Plus`: 管理機能と使用量 dashboard を提供する外部アプリケーション。release パッケージではバイナリとして同梱されます。
-- このリポジトリの統合コード: proxy の usage event を Redis 互換 queue として公開し、proxy と manager を一緒に動かせるようにします。
+## はじめに
 
-目的は、上流 CLIProxyAPI との互換性を保ちながら、Plus 固有の provider、多アカウント管理、使用量収集、簡単なデプロイを提供することです。
+CLIProxyAPIガイド：[https://help.router-for.me/](https://help.router-for.me/)
 
-## 機能
+## 管理API
 
-- OpenAI、Gemini、Claude、Codex、Grok、Responses 互換 API。
-- Codex、Claude、Gemini、Kimi、Antigravity、xAI/Grok、GitHub Copilot、Kiro、Cursor、CodeBuddy、Kilo、iFlow、GitLab Duo などのログインまたは token 接続。
-- round-robin / fill-first のアカウント選択、model alias、hot reload。
-- Amp CLI と Amp IDE extension 用の provider route。
-- 対応 provider での WebSocket。
-- request log、Management API、管理パネル。
-- 外部 collector が消費できる Redis 互換 usage queue。
-- CLIProxyAPI Plus と CPA-Manager-Plus をまとめて起動できる release helper。
+[MANAGEMENT_API.md](https://help.router-for.me/management/api)を参照
 
-## 構成
+## 使用量統計
 
-```text
-cmd/server/                  CLI entrypoint
-internal/api/                Gin server, routes, middleware, Management API
-internal/api/modules/amp/    Amp routes and reverse proxy helpers
-internal/runtime/executor/   provider executors
-internal/translator/         protocol translators
-internal/redisqueue/         Redis-compatible usage queue plugin
-sdk/cliproxy/                embeddable proxy service
-sdk/cliproxy/usage/          usage event manager and plugin interface
-manager/                     CPA-Manager-Plus binary and persistent data
-docs/                        SDK and provider documentation
-```
+v6.10.0以降、CLIProxyAPIおよび [CPAMC](https://github.com/router-for-me/Cli-Proxy-API-Management-Center) プロジェクトには使用量統計機能がプリセットされなくなりました。使用量統計が必要な場合は、次のプロジェクトをご利用ください：
 
-## 使用量収集
+### [CPA Usage Keeper](https://github.com/Willxup/cpa-usage-keeper)
 
-CLIProxyAPI Plus は runtime で usage record を生成し、`sdk/cliproxy/usage` から publish します。`internal/redisqueue` plugin は record を JSON に変換し、memory queue に保存します。
+CLIProxyAPI向けの独立した使用量永続化・可視化サービス。CLIProxyAPIデータを定期同期してSQLiteに保存し、集計APIと、使用量や各種統計を確認できる組み込みダッシュボードを提供します。
 
-API server は proxy と同じ port で Redis RESP 接続も受け付けます。consumer は management key で認証し、`LPOP` または `RPOP` で event を読み取ります。
+### [CPA-Manager-Plus](https://github.com/seakee/CPA-Manager-Plus)
 
-CPA-Manager-Plus はこの queue を消費し、永続化、service management、可視化を行います。
+リクエスト単位の監視とコスト推定を備えたCLIProxyAPI向けのフル管理センターです。CPA-Managerは、収集したリクエストをアカウント、モデル、チャネル、レイテンシ、ステータス、Token使用量ごとに追跡し、編集可能なモデル価格とLiteLLM価格のワンクリック同期でコストを推定します。SQLiteでイベントを永続化し、Codexアカウントプール向けに一括検査、クォータ判定、異常アカウント検出、クリーンアップ提案、ワンクリック実行を提供し、日常的なマルチアカウント運用に適しています。
 
-既定の構成:
+## SDKドキュメント
 
-```text
-client -> CLIProxyAPI Plus :8317 -> Redis-compatible usage queue
-                              |
-                              v
-                         CPA-Manager-Plus :18317
-```
+- 使い方：[docs/sdk-usage.md](docs/sdk-usage.md)
+- 上級（エグゼキューターとトランスレーター）：[docs/sdk-advanced.md](docs/sdk-advanced.md)
+- アクセス：[docs/sdk-access.md](docs/sdk-access.md)
+- ウォッチャー：[docs/sdk-watcher.md](docs/sdk-watcher.md)
+- カスタムプロバイダーの例：`examples/custom-provider`
 
-proxy config:
+## コントリビューション
 
-```yaml
-remote-management:
-  secret-key: "change-me"
+コントリビューションを歓迎します！お気軽にPull Requestを送ってください。
 
-usage-statistics-enabled: true
-redis-usage-queue-retention-seconds: 60
-```
+1. リポジトリをフォーク
+2. フィーチャーブランチを作成（`git checkout -b feature/amazing-feature`）
+3. 変更をコミット（`git commit -m 'Add some amazing feature'`）
+4. ブランチにプッシュ（`git push origin feature/amazing-feature`）
+5. Pull Requestを作成
 
-初回起動後、`http://SERVER_IP:18317/management.html` を開きます。自動生成された CPA-Manager-Plus admin key でログインし、CLIProxyAPI Plus の URL に `http://127.0.0.1:8317`、key に CPA の management key を設定します。manager は既定で `USAGE_COLLECTOR_MODE=auto` を使用します。
+## 関連プロジェクト
 
-## Quick Start
+CLIProxyAPIをベースにした以下のプロジェクトがあります：
 
-```bash
-cp config.example.yaml config.yaml
-go run ./cmd/server --config ./config.yaml
-```
+### [vibeproxy](https://github.com/automazeio/vibeproxy)
 
-Build:
+macOSネイティブのメニューバーアプリで、Claude CodeとChatGPTのサブスクリプションをAIコーディングツールで使用可能 - APIキー不要
 
-```bash
-go build -o cli-proxy-api-plus ./cmd/server
-./cli-proxy-api-plus --config ./config.yaml
-```
+### [Subtitle Translator](https://github.com/VjayC/SRT-Subtitle-Translator-Validator)
 
-## CPA-Manager-Plus と一緒に起動
+CLIProxyAPI経由で既存のLLMサブスクリプション（Gemini、ChatGPT、Claude, etc.）を使用してSRT字幕を翻訳および検証する、クロスプラットフォームのデスクトップおよびWebアプリ - APIキー不要。
 
-release archive には短い Linux helper scripts と CPA-Manager-Plus binary が含まれます。
+### [CCS (Claude Code Switch)](https://github.com/kaitranntt/ccs)
 
-```text
-CLIProxyAPIPlus_<version>_linux_<arch>/
-|-- cli-proxy-api-plus
-|-- config.example.yaml
-|-- start.sh
-|-- stop.sh
-|-- restart.sh
-|-- update.sh
-`-- manager/
-    `-- cpa-manager-plus
-```
+CLIProxyAPI OAuthを使用して複数のClaudeアカウントや代替モデル（Gemini、Codex、Antigravity）を即座に切り替えるCLIラッパー - APIキー不要
 
-Initial setup:
+### [Quotio](https://github.com/nguyenphutrong/quotio)
 
-```bash
-cp config.example.yaml config.yaml
-./start.sh
-```
+Claude、Gemini、OpenAI、Antigravityのサブスクリプションを統合し、リアルタイムのクォータ追跡とスマート自動フェイルオーバーを備えたmacOSネイティブのメニューバーアプリ。Claude Code、OpenCode、Droidなどのコーディングツール向け - APIキー不要
 
-Service control:
+### [ProxyPilot](https://github.com/Finesssee/ProxyPilot)
 
-```bash
-./start.sh
-./stop.sh
-./restart.sh
-```
+TUI、システムトレイ、マルチプロバイダーOAuthを備えたWindows向けCLIProxyAPIフォーク - AIコーディングツール用、APIキー不要
 
-起動されるサービス:
+### [Claude Proxy VSCode](https://github.com/uzhao/claude-proxy-vscode)
 
-- CLIProxyAPI Plus: `http://127.0.0.1:8317`
-- CPA-Manager-Plus: `http://127.0.0.1:18317`
+Claude Codeモデルを素早く切り替えるVSCode拡張機能。バックエンドとしてCLIProxyAPIを統合し、バックグラウンドでの自動ライフサイクル管理を搭載
 
-CPA-Manager-Plus は初回起動時に `cpamp_...` admin key を生成します。次の log で確認できます。
+### [ZeroLimit](https://github.com/0xtbug/zero-limit)
 
-```bash
-tail -n 200 logs/cpa-manager-plus.out.log
-tail -n 200 logs/cpa-manager-plus.err.log
-```
+CLIProxyAPIを使用してAIコーディングアシスタントのクォータを監視するTauri + React製のWindowsデスクトップアプリ。Gemini、Claude、OpenAI Codex、Antigravityアカウントの使用量をリアルタイムダッシュボード、システムトレイ統合、ワンクリックプロキシコントロールで追跡 - APIキー不要
 
-manager の永続データは `manager/data/` と `manager/config.json` に保存されます。`manager/data/usage.sqlite*` と `manager/data/data.key` を backup してください。update script は manager binary のみを置き換え、これらのファイルを保持します。
+### [CPA-XXX Panel](https://github.com/ferretgeek/CPA-X)
 
-## Update
+CLIProxyAPI向けの軽量Web管理パネル。ヘルスチェック、リソース監視、リアルタイムログ、自動更新、リクエスト統計、料金表示機能を搭載。ワンクリックインストールとsystemdサービスに対応
 
-デフォルトでは GitHub Release から直接 download します。
+### [CLIProxyAPI Tray](https://github.com/kitephp/CLIProxyAPI_Tray)
 
-```bash
-./update.sh --tag v7.2.91.1
-```
+PowerShellスクリプトで実装されたWindowsトレイアプリケーション。サードパーティライブラリに依存せず、ショートカットの自動作成、サイレント実行、パスワード管理、チャネル切り替え（Main / Plus）、自動ダウンロードおよび自動更新に対応
 
-Install only, then restart manually:
+### [霖君](https://github.com/wangdabaoqq/LinJun)
 
-```bash
-./update.sh \
-  --tag v7.2.91.1 \
-  --no-restart
+霖君はAIプログラミングアシスタントを管理するクロスプラットフォームデスクトップアプリケーションで、macOS、Windows、Linuxシステムに対応。Claude Code、Gemini、OpenAI Codexなどのコーディングツールを統合管理し、ローカルプロキシによるマルチアカウントクォータ追跡とワンクリック設定が可能
 
-./restart.sh
-```
+### [CLIProxyAPI Dashboard](https://github.com/itsmylife44/cliproxyapi-dashboard)
 
-Aliyun OSS は optional mirror として引き続き利用できます。`--bucket` と `--endpoint` を指定してください。
+Next.js、React、PostgreSQLで構築されたCLIProxyAPI用のモダンなWebベース管理ダッシュボード。リアルタイムログストリーミング、構造化された設定編集、APIキー管理、Claude/Gemini/Codex向けOAuthプロバイダー統合、使用量分析、コンテナ管理、コンパニオンプラグインによるOpenCodeとの設定同期機能を搭載 - 手動でのYAML編集は不要
 
-## Amp CLI Support
+### [All API Hub](https://github.com/qixing-jk/all-api-hub)
 
-- `/api/provider/{provider}/v1/messages`
-- `/api/provider/{provider}/v1beta/models/...`
-- `/api/provider/{provider}/v1/chat/completions`
+New API互換リレーサイトアカウントをワンストップで管理するブラウザ拡張機能。残高と使用量のダッシュボード、自動チェックイン、一般的なアプリへのワンクリックキーエクスポート、ページ内API可用性テスト、チャネル/モデルの同期とリダイレクト機能を搭載。Management APIを通じてCLIProxyAPIと統合し、ワンクリックでプロバイダーのインポートと設定同期が可能
 
-management proxy、model fallback、model mapping、sensitive Amp management route の localhost 制限も含まれます。
+### [Shadow AI](https://github.com/HEUDavid/shadow-ai)
 
-## Build And Test
+Shadow AIは制限された環境向けに特別に設計されたAIアシスタントツールです。ウィンドウや痕跡のないステルス動作モードを提供し、LAN（ローカルエリアネットワーク）を介したクロスデバイスAI質疑応答のインタラクションと制御を可能にします。本質的には「画面/音声キャプチャ + AI推論 + 低摩擦デリバリー」の自動化コラボレーションレイヤーであり、制御されたデバイスや制限された環境でアプリケーション横断的にAIアシスタントを没入的に使用できるようユーザーを支援します。
 
-```bash
-gofmt -w .
-go build -o test-output ./cmd/server
-rm -f test-output
-go test ./...
-```
+### [ProxyPal](https://github.com/buddingnewinsights/proxypal)
 
-## Upstream Projects
+CLIProxyAPIをネイティブGUIでラップしたクロスプラットフォームデスクトップアプリ（macOS、Windows、Linux）。Claude、ChatGPT、Gemini、GitHub Copilot、カスタムOpenAI互換エンドポイントに対応し、使用状況分析、リクエスト監視、人気コーディングツールの自動設定機能を搭載 - APIキー不要
 
-- CLIProxyAPI: `https://github.com/router-for-me/CLIProxyAPI`
-- CLIProxyAPI Plus: `https://github.com/Tonkic/CLIProxyAPIPlus`
-- CPA-Manager-Plus: `https://github.com/seakee/CPA-Manager-Plus`
+### [CLIProxyAPI Quota Inspector](https://github.com/AllenReder/CLIProxyAPI-Quota-Inspector)
 
-## License
+CLIProxyAPI向けのすぐに使えるクロスプラットフォームのクォータ確認ツール。アカウントごとの codex 5h/7d クォータ表示、プラン別ソート、ステータス色分け、複数アカウントの集計分析に対応。
 
-MIT License。詳細は [LICENSE](LICENSE) を参照してください。
+### [CLIProxy Pool Watch](https://github.com/murasame612/CLIProxyPoolWidget)
+
+CLIProxyAPIプール内のChatGPT/Codexアカウントクォータを監視するmacOSネイティブSwiftUIアプリ。Management APIを通じて、アカウントの可用性、Plus基準の容量、5時間/週次クォータバー、プラン重み、復元予測を表示します。
+
+### [Panopticon](https://github.com/eltmon/panopticon-cli)
+
+AIコーディングアシスタント向けのマルチエージェントオーケストレーションツール。CLIProxyAPIをローカルsidecarとして実行することで、エージェントがChatGPTサブスクリプション経由でGPTモデルを利用できるようにし、Claude CodeをAnthropic互換エンドポイントへ向けるため、OpenAI APIキーは不要です。
+
+### [Tunnel Agent](https://github.com/Villoh/tunnel-agent)
+
+CLIProxyAPIとPerplexity WebUI Scraperをひとつのインターフェースで管理するWindowsデスクトップUI。QuotioとVibeProxyにインスパイアされ、OAuthプロバイダー（Claude、Gemini、Codex、Kimi、Antigravity）、カスタムAPIキー、Perplexityセッションアカウントを接続し、任意のコーディングエージェントをローカルエンドポイントに向けることができます。
+
+### [Quotio Desktop](https://github.com/xiaocoss/quotio-desktop)
+
+Quotio のクロスプラットフォーム（Tauri）移植版（Windows / macOS / Linux 対応）。CLIProxyAPI 経由で複数の AI アカウント（Codex、Claude Code、GitHub Copilot、Gemini、Antigravity、Kiro、Cursor、Trae、GLM）のプールを管理し、アカウントごとの 5 時間 / 週間クォータバー、Codex のリセットクレジットとワンクリックリセット、スマートスケジューリング、使用統計、Codex マルチインスタンスに対応。API キー不要。
+
+### [Universal Chat Provider](https://github.com/maxdewald/vscode-universal-chat-provider)
+
+Claude、ChatGPT/Codex、Antigravity、Grok、Kimi のサブスクリプションを GitHub Copilot Chat のネイティブ言語モデルとして利用できる VS Code 拡張機能です。Git のコミットメッセージ、チャットタイトル、要約の生成にも使えます。CLIProxyAPI を完全管理されたバックグラウンドライフサイクル（ダウンロード、検証、監視）で実行し、すべてのウィンドウで共有するため、セットアップは不要です。API キーは不要で、OAuth だけで利用できます。
+
+### [CPA-Tray-Powershell](https://github.com/IQ-Director/CPA-Tray-Powershell)
+
+PowerShellベースのWindows向けCLIProxyAPIシステムトレイランチャー。コンソールウィンドウを表示せずにバックグラウンドで実行し、管理ページを開き、管理ウィンドウを閉じた後もバックエンドを維持してトレイからページを再表示できます。起動時のCLIProxyAPI更新確認、SHA-256検証と失敗時のロールバック、ワンクリックでのCLIProxyAPI再起動と更新、PID検証に基づくプロセス管理、安全なサービス停止にも対応しています。
+
+### [Grok Search MCP](https://github.com/MapleMapleCat/Grok_Search_Mcp)
+
+HTTP専用のModel Context Protocol（MCP）サーバーです。CLIProxyAPIのデプロイメントを利用して、MCPクライアントにGrokを活用したリアルタイムWeb検索、X/Twitter検索、モデル検出を提供します。MCPトランスポート、クライアントAPIキー管理、クォータ、使用量追跡、Web管理パネルも備えています。
+
+### [AIUsage](https://github.com/sylearn/AIUsage)
+
+macOSネイティブのSwiftUI製AIサブスクリプションダッシュボード兼コーディングプロキシ管理アプリ。公式CLIProxyAPIリリースのダウンロード、検証、起動・監視、更新、ロールバックをアプリ内で管理し、OAuthアカウントとライブモデルを統合します。1つのゲートウェイをCodex、Claude Code/Science、OpenCode、OpenAI/Anthropic/Geminiクライアントへ接続でき、LANアクセスにも対応します。
+
+### [Claude Dialects](https://github.com/stefandevo/claude-dialects)
+
+ネイティブ同様の操作感を持つ複数のClaude Codeコマンドを実行し、それぞれを異なるモデル（Codex、GLM、Kimi、Gemini、Grok、MiniMax、DeepSeek、Cursor、Copilot、Claude）で動作させます。各コマンドは、独立した設定、履歴、ポート、およびGo SDKで連携した組み込みCLIProxyAPIインスタンスを備えた本物のClaude Codeインターフェースを起動するため、プロキシを別途インストールする必要はありません。macOSのみ対応。詳細は[claude-dialects.cc](https://claude-dialects.cc/)をご覧ください。
+
+### [WebBrain](https://github.com/webbrain-one/webbrain)
+
+CLIProxyAPI のローカル OpenAI 互換エンドポイントをモデルプロバイダーとして利用できるブラウザーエージェントです。EasyCLIProxyAPI を通じて CLIProxyAPI を使用する場合は、WebBrain の独立した[セットアップ、セキュリティ、アカウントリスクのガイド](https://webbrain.one/docs/easy-cli-proxy/)をご覧ください。
+
+> [!NOTE]
+> CLIProxyAPIをベースにプロジェクトを開発した場合は、PRを送ってこのリストに追加してください。
+
+## その他の選択肢
+
+以下のプロジェクトはCLIProxyAPIの移植版またはそれに触発されたものです：
+
+### [9Router](https://github.com/decolua/9router)
+
+CLIProxyAPIに触発されたNext.js実装。インストールと使用が簡単で、フォーマット変換（OpenAI/Claude/Gemini/Ollama）、自動フォールバック付きコンボシステム、指数バックオフ付きマルチアカウント管理、Next.js Webダッシュボード、CLIツール（Cursor、Claude Code、Cline、RooCode）のサポートをゼロから構築 - APIキー不要
+
+### [OmniRoute](https://github.com/diegosouzapw/OmniRoute)
+
+コーディングを止めない。無料および低コストのAIモデルへのスマートルーティングと自動フォールバック。
+
+OmniRouteはマルチプロバイダーLLM向けのAIゲートウェイです：スマートルーティング、負荷分散、リトライ、フォールバックを備えたOpenAI互換エンドポイント。ポリシー、レート制限、キャッシュ、可観測性を追加して、信頼性が高くコストを意識した推論を実現します。
+
+### [Codex Switch](https://github.com/9ycrooked/CodexSwitch)
+
+Tauri 2 + Vue 3で構築された、複数のOpenAI Codexデスクトップアカウントを管理するためのツールです。保存済みのChatGPT/Codex認証プロファイルを切り替え、5時間および週次クォータ使用量をリアルタイムで確認し、tokenの状態を検証し、現在のアカウント詳細を表示し、手動コピーなしでauth.jsonファイルをインポートまたは保存できます。
+
+> [!NOTE]
+> CLIProxyAPIの移植版またはそれに触発されたプロジェクトを開発した場合は、PRを送ってこのリストに追加してください。
+
+## ライセンス
+
+本プロジェクトはMITライセンスの下でライセンスされています - 詳細は[LICENSE](LICENSE)ファイルを参照してください。

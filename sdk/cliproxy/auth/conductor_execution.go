@@ -448,7 +448,7 @@ func (m *Manager) executeMixedOnce(ctx context.Context, providers []string, req 
 					m.MarkResult(execCtx, result)
 				}
 				if okAction {
-					if isRequestScopedStop(action, okAction) {
+					if !retryAllUpstreamErrors(opts) && isRequestScopedStop(action, okAction) {
 						return cliproxyexecutor.Response{}, wrapRequestStopError(errExec)
 					}
 					authErr = errExec
@@ -457,7 +457,7 @@ func (m *Manager) executeMixedOnce(ctx context.Context, providers []string, req 
 					}
 					continue
 				}
-				if isResponsesCompactRequestFaultError(execOpts, errExec) || isRequestInvalidError(errExec) {
+				if !retryAllUpstreamErrors(execOpts) && (isResponsesCompactRequestFaultError(execOpts, errExec) || isRequestInvalidError(errExec)) {
 					return cliproxyexecutor.Response{}, errExec
 				}
 				authErr = errExec
@@ -474,7 +474,7 @@ func (m *Manager) executeMixedOnce(ctx context.Context, providers []string, req 
 		if authErr != nil {
 			action, okAction := matchRequestScopedErrorAction(auth, authErr, m.runtimeConfigSnapshot())
 			if okAction {
-				if isRequestScopedStop(action, okAction) {
+				if !retryAllUpstreamErrors(opts) && isRequestScopedStop(action, okAction) {
 					return cliproxyexecutor.Response{}, wrapRequestStopError(authErr)
 				}
 				lastErr = authErr
@@ -483,7 +483,7 @@ func (m *Manager) executeMixedOnce(ctx context.Context, providers []string, req 
 				}
 				continue
 			}
-			if isResponsesCompactRequestFaultError(opts, authErr) || isRequestInvalidError(authErr) {
+			if !retryAllUpstreamErrors(opts) && (isResponsesCompactRequestFaultError(opts, authErr) || isRequestInvalidError(authErr)) {
 				return cliproxyexecutor.Response{}, authErr
 			}
 			lastErr = authErr
@@ -630,7 +630,7 @@ func (m *Manager) executeCountMixedOnce(ctx context.Context, providers []string,
 					m.MarkResult(execCtx, result)
 				}
 				if okAction {
-					if isRequestScopedStop(action, okAction) {
+					if !retryAllUpstreamErrors(opts) && isRequestScopedStop(action, okAction) {
 						return cliproxyexecutor.Response{}, wrapRequestStopError(errExec)
 					}
 					authErr = errExec
@@ -639,7 +639,7 @@ func (m *Manager) executeCountMixedOnce(ctx context.Context, providers []string,
 					}
 					continue
 				}
-				if isRequestInvalidError(errExec) {
+				if !retryAllUpstreamErrors(execOpts) && isRequestInvalidError(errExec) {
 					return cliproxyexecutor.Response{}, errExec
 				}
 				authErr = errExec
@@ -656,7 +656,7 @@ func (m *Manager) executeCountMixedOnce(ctx context.Context, providers []string,
 		if authErr != nil {
 			action, okAction := matchRequestScopedErrorAction(auth, authErr, m.runtimeConfigSnapshot())
 			if okAction {
-				if isRequestScopedStop(action, okAction) {
+				if !retryAllUpstreamErrors(opts) && isRequestScopedStop(action, okAction) {
 					return cliproxyexecutor.Response{}, wrapRequestStopError(authErr)
 				}
 				lastErr = authErr
@@ -665,7 +665,7 @@ func (m *Manager) executeCountMixedOnce(ctx context.Context, providers []string,
 				}
 				continue
 			}
-			if isRequestInvalidError(authErr) {
+			if !retryAllUpstreamErrors(opts) && isRequestInvalidError(authErr) {
 				return cliproxyexecutor.Response{}, authErr
 			}
 			lastErr = authErr
@@ -1639,6 +1639,14 @@ func warnLogUpstreamFailure(ctx context.Context, entry *log.Entry, provider, mod
 	authIdent := formatAuthIdentity(auth, provider)
 	errSummary := summarizeErrorForLog(err)
 	entry.Warnf("upstream execution failed: provider=%s model=%s auth=%s duration=%s err=%s", provider, model, authIdent, duration.Round(time.Millisecond), errSummary)
+}
+
+func retryAllUpstreamErrors(opts cliproxyexecutor.Options) bool {
+	if opts.Metadata == nil {
+		return false
+	}
+	v, ok := opts.Metadata[cliproxyexecutor.RetryAllUpstreamErrorsMetadataKey].(bool)
+	return ok && v
 }
 
 // InjectCredentials delegates per-provider HTTP request preparation when supported.
