@@ -222,11 +222,10 @@ func TestCodexExecutor_BootstrapBuffering_DefaultDisabledPassthrough(t *testing.
 	if streamErr == nil {
 		t.Fatal("expected stream error in chunks for default unbuffered mode")
 	}
-	// Disabling the feature must restore the previous behaviour exactly, status classification
-	// included: the 503 restoration is scoped to the buffered failover path, so an unbuffered
-	// overload still classifies as a bad gateway and keeps its old cooldown treatment.
-	if got := statusCodeFromTestError(t, streamErr); got != http.StatusBadGateway {
-		t.Fatalf("status code = %d, want %d while buffering is disabled", got, http.StatusBadGateway)
+	// Explicit upstream overload remains a temporary service-unavailable failure
+	// regardless of whether bootstrap buffering is enabled.
+	if got := statusCodeFromTestError(t, streamErr); got != http.StatusServiceUnavailable {
+		t.Fatalf("status code = %d, want %d while buffering is disabled", got, http.StatusServiceUnavailable)
 	}
 }
 
@@ -363,8 +362,8 @@ func TestCodexWebsocketsExecutor_BootstrapBuffering_DefaultDisabledPassthrough(t
 	if streamErr == nil {
 		t.Fatal("expected stream error in chunks for default unbuffered mode")
 	}
-	if got := statusCodeFromTestError(t, streamErr); got != http.StatusBadGateway {
-		t.Fatalf("status code = %d, want %d while buffering is disabled", got, http.StatusBadGateway)
+	if got := statusCodeFromTestError(t, streamErr); got != http.StatusServiceUnavailable {
+		t.Fatalf("status code = %d, want %d while buffering is disabled", got, http.StatusServiceUnavailable)
 	}
 }
 
