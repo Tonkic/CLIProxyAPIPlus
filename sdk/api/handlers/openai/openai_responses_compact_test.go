@@ -299,7 +299,7 @@ func TestOpenAIResponsesCompactTransientFailureDoesNotCooldownAuthAndPreservesEr
 	}
 }
 
-func TestOpenAIResponsesCompactRequestFaultStopsFallbackAndPreservesError(t *testing.T) {
+func TestOpenAIResponsesCompactRequestFaultExhaustsFallbackAndPreservesError(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	executor := &compactFailureMockExecutor{
 		compactErr: compactMockStatusError{
@@ -345,9 +345,9 @@ func TestOpenAIResponsesCompactRequestFaultStopsFallbackAndPreservesError(t *tes
 		t.Fatalf("compact body = %s, want containing '404 page not found'", resp.Body.String())
 	}
 
-	// 2. Should stop fallback on request/capability fault (calls == 1)
-	if executor.calls != 1 {
-		t.Fatalf("executor calls = %d, want 1 (fallback should stop)", executor.calls)
+	// 2. Upstream errors must exhaust all candidate credentials before failing.
+	if executor.calls != 2 {
+		t.Fatalf("executor calls = %d, want 2 (all credentials should be tried)", executor.calls)
 	}
 
 	// 3. Auth model states should NOT be marked unavailable for normal traffic
