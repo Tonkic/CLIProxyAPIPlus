@@ -496,6 +496,13 @@ func (r *UsageReporter) setTTFT(ttft time.Duration) {
 	if ttft < 0 {
 		ttft = 0
 	}
+	// A response body can be available in the same clock tick as the request
+	// round-trip (notably for small non-streaming media responses). Keep the
+	// recorded metric strictly positive so callers can distinguish an observed
+	// first byte from an unobserved TTFT value of zero.
+	if ttft == 0 {
+		ttft = time.Nanosecond
+	}
 	r.ttftMu.Lock()
 	if r.ttftSet {
 		r.ttftMu.Unlock()
