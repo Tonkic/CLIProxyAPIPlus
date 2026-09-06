@@ -83,7 +83,7 @@ jobs:
             cat "$release_notes_file"
             printf '\n'
             cat "$changelog_notes_file"
-          } > "$updated_notes_file"
+          } | head -c 120000 > "$updated_notes_file"
 
           if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
             gh release edit "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --notes-file "$updated_notes_file"
