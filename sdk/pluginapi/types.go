@@ -1431,6 +1431,9 @@ type UsageRecord struct {
 	Latency time.Duration
 	// TTFT is the time to first token for streaming requests.
 	TTFT time.Duration
+	// FirstPacket is the time to the first upstream response packet/event.
+	// It is useful for distinguishing network/bootstrap delay from model token delay.
+	FirstPacket time.Duration
 	// Failed reports whether the request failed.
 	Failed bool
 	// Failure contains failure details when Failed is true.

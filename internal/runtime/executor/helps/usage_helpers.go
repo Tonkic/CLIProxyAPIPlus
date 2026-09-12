@@ -466,10 +466,20 @@ func (r *UsageReporter) buildRecordForModel(model string, detail usage.Detail, f
 		RequestedAt:         r.requestedAt,
 		Latency:             r.latency(),
 		TTFT:                r.ttftDuration(),
+		FirstPacket:         r.firstPacketDurationValue(),
 		Failed:              failed,
 		Fail:                fail,
 		Detail:              detail,
 	}
+}
+
+func (r *UsageReporter) firstPacketDurationValue() time.Duration {
+	if r == nil {
+		return 0
+	}
+	r.ttftMu.RLock()
+	defer r.ttftMu.RUnlock()
+	return r.firstPacketDuration
 }
 
 func failFromErrors(errs ...error) usage.Failure {

@@ -12,7 +12,7 @@ permissions:
 env:
   GH_REPO: ${{ github.repository }}
   GO_VERSION: '1.26.4'
-  MANAGER_VERSION: v1.12.9
+  MANAGER_VERSION: v1.12.12
 
 jobs:
   prepare-release:

@@ -54,6 +54,8 @@ type Record struct {
 	RequestedAt time.Time
 	Latency     time.Duration
 	TTFT        time.Duration
+	// FirstPacket is the time to the first upstream response packet/event.
+	FirstPacket time.Duration
 	Failed      bool
 	Fail        Failure
 	Detail      Detail
