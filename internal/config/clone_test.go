@@ -132,9 +132,8 @@ func sampleCloneRuntimeConfig() *Config {
 		SDKConfig: SDKConfig{
 			APIKeys: []string{"client-key"},
 			Streaming: StreamingConfig{
-				KeepAliveSeconds:        3,
-				BootstrapRetries:        2,
-				BootstrapTimeoutSeconds: 20,
+				KeepAliveSeconds: 3,
+				BootstrapRetries: 2,
 			},
 		},
 		Home: HomeConfig{
