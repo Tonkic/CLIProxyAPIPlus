@@ -364,7 +364,7 @@ func TestExecuteStreamWithAuthManager_RetriesBeforeFirstByte(t *testing.T) {
 	handler := NewBaseAPIHandlers(&sdkconfig.SDKConfig{
 		PassthroughHeaders: true,
 		Streaming: sdkconfig.StreamingConfig{
-			BootstrapRetries: 1,
+			BootstrapRetries: 0,
 		},
 	}, manager)
 	dataChan, upstreamHeaders, errChan := handler.ExecuteStreamWithAuthManager(context.Background(), "openai", "test-model", []byte(`{"model":"test-model"}`), "")
@@ -622,11 +622,12 @@ func TestExecuteStreamWithAuthManager_CancelDuringSynchronousBootstrap(t *testin
 
 func TestExecuteStreamWithAuthManager_TTFTTimeoutCancelsSilentStream(t *testing.T) {
 	canceled := make(chan struct{})
+	var canceledOnce sync.Once
 	executor := &bootstrapStreamExecutor{stream: func(ctx context.Context, _ int) (*coreexecutor.StreamResult, error) {
 		chunks := make(chan coreexecutor.StreamChunk)
 		go func() {
 			<-ctx.Done()
-			close(canceled)
+			canceledOnce.Do(func() { close(canceled) })
 			time.Sleep(10 * time.Millisecond)
 			close(chunks)
 		}()

@@ -435,8 +435,10 @@ func (h *BaseAPIHandler) executeStreamWithAuthManagerFormats(ctx context.Context
 	} else {
 		opts.Metadata[coreexecutor.SelectedAuthCallbackMetadataKey] = func(id string) { selectedAuthID = id }
 	}
+	maxBootstrapRetries := StreamingBootstrapRetries(h.Cfg)
+	bootstrapRetries := 0
+	opts.Metadata[coreexecutor.ExcludedAuthIDsMetadataKey] = excludedAuthIDs
 	attempt, err, streamCanceledBeforeExecute := executeStreamAttempt(ctx, ttftTimeout, func(attemptCtx context.Context) (*coreexecutor.StreamResult, error) {
-		opts.Metadata[coreexecutor.ExcludedAuthIDsMetadataKey] = excludedAuthIDs
 		return h.AuthManager.ExecuteStream(attemptCtx, providers, req, opts)
 	})
 	streamResult := attempt.result
@@ -638,34 +640,21 @@ func (h *BaseAPIHandler) executeStreamWithAuthManagerFormats(ctx context.Context
 		}
 	}
 
-	bootstrapEligible := func(err error) bool {
-		status := statusFromError(err)
-		if status == 0 {
-			return true
-		}
-		switch status {
-		case http.StatusUnauthorized, http.StatusForbidden, http.StatusPaymentRequired,
-			http.StatusRequestTimeout, http.StatusTooManyRequests:
-			return true
-		default:
-			return status >= http.StatusInternalServerError
-		}
-	}
-
-	maxBootstrapRetries := StreamingBootstrapRetries(h.Cfg)
-	if h.AuthManager.HomeEnabled() {
-		maxBootstrapRetries = 0
-	}
-	for bootstrapRetries := 0; !streamCanceledBeforeRead; {
+	for !streamCanceledBeforeRead {
 		readInitialStreamChunks()
 		if streamCanceledBeforeRead || bootstrapErr != nil || bootstrapStreamErr == nil {
 			break
 		}
-		if bootstrapRetries >= maxBootstrapRetries || !bootstrapEligible(bootstrapStreamErr) {
+		// A bootstrap failure is request-local. Keep trying the remaining
+		// credentials until the pool is exhausted; do not let the status code
+		// of one upstream stop failover. A value of zero means no configured
+		// retry cap (the auth manager's excluded-auth set is the boundary).
+		if h.AuthManager.HomeEnabled() || (maxBootstrapRetries > 0 && bootstrapRetries >= maxBootstrapRetries) {
 			bootstrapErr = executionErrorMessage(bootstrapStreamErr)
 			break
 		}
 		bootstrapRetries++
+		opts.Metadata[coreexecutor.ExcludedAuthIDsMetadataKey] = excludedAuthIDs
 		retryAttempt, retryErr, retryCanceled := executeStreamAttempt(ctx, ttftTimeout, func(attemptCtx context.Context) (*coreexecutor.StreamResult, error) {
 			return h.AuthManager.ExecuteStream(attemptCtx, providers, req, opts)
 		})
@@ -689,6 +678,8 @@ func (h *BaseAPIHandler) executeStreamWithAuthManagerFormats(ctx context.Context
 			if isAuthSelectionUnavailable(retryErr) && originalBootstrapErr.StatusCode >= http.StatusInternalServerError {
 				bootstrapErr = originalBootstrapErr
 			} else {
+				// Keep the original bootstrap error for the client, but only after
+				// the manager reports that no excluded credential remains.
 				bootstrapErr = executionErrorMessage(enrichAuthSelectionError(retryErr, providers, normalizedModel))
 			}
 			break
