@@ -3,6 +3,7 @@ package handlers
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -427,7 +428,15 @@ func (h *BaseAPIHandler) executeStreamWithAuthManagerFormats(ctx context.Context
 	}
 	ctx = enrichContextWithSessionHierarchy(ctx, opts.Headers, req.Payload, opts.Metadata)
 	ttftTimeout := StreamingTTFTTimeout(h.Cfg)
+	excludedAuthIDs := map[string]struct{}{}
+	var selectedAuthID string
+	if cb, ok := opts.Metadata[coreexecutor.SelectedAuthCallbackMetadataKey].(func(string)); ok {
+		opts.Metadata[coreexecutor.SelectedAuthCallbackMetadataKey] = func(id string) { selectedAuthID = id; cb(id) }
+	} else {
+		opts.Metadata[coreexecutor.SelectedAuthCallbackMetadataKey] = func(id string) { selectedAuthID = id }
+	}
 	attempt, err, streamCanceledBeforeExecute := executeStreamAttempt(ctx, ttftTimeout, func(attemptCtx context.Context) (*coreexecutor.StreamResult, error) {
+		opts.Metadata[coreexecutor.ExcludedAuthIDsMetadataKey] = excludedAuthIDs
 		return h.AuthManager.ExecuteStream(attemptCtx, providers, req, opts)
 	})
 	streamResult := attempt.result
@@ -591,6 +600,9 @@ func (h *BaseAPIHandler) executeStreamWithAuthManagerFormats(ctx context.Context
 				return
 			case <-timeoutC:
 				bootstrapStreamErr = &streamingTTFTTimeoutError{timeout: ttftTimeout}
+				if selectedAuthID != "" {
+					excludedAuthIDs[selectedAuthID] = struct{}{}
+				}
 				attemptCancel()
 				return
 			case chunk, ok = <-chunks:
@@ -660,6 +672,9 @@ func (h *BaseAPIHandler) executeStreamWithAuthManagerFormats(ctx context.Context
 		if retryCanceled {
 			streamCanceledBeforeRead = true
 			break
+		}
+		if errors.As(retryErr, new(*streamingTTFTTimeoutError)) && selectedAuthID != "" {
+			excludedAuthIDs[selectedAuthID] = struct{}{}
 		}
 		retryResult := retryAttempt.result
 		attemptCancel = retryAttempt.cancel

@@ -464,7 +464,7 @@ func (m *Manager) executeMixedOnce(ctx context.Context, providers []string, req 
 	opts = ensureRequestedModelMetadata(opts, routeModel)
 	homeMode := m.HomeEnabled()
 	homeAuthCount := 1
-	tried := make(map[string]struct{})
+	tried := excludedAuthIDsFromMetadata(opts.Metadata)
 	if !homeMode {
 		for authID := range m.requestRetryRoundExclusions(retryRound, defaultRequestRetry) {
 			tried[authID] = struct{}{}
@@ -666,6 +666,21 @@ func (m *Manager) executeMixedOnce(ctx context.Context, providers []string, req 
 			continue
 		}
 	}
+}
+
+func excludedAuthIDsFromMetadata(meta map[string]any) map[string]struct{} {
+	tried := make(map[string]struct{})
+	if meta == nil {
+		return tried
+	}
+	if ids, ok := meta[cliproxyexecutor.ExcludedAuthIDsMetadataKey].(map[string]struct{}); ok {
+		for id := range ids {
+			if strings.TrimSpace(id) != "" {
+				tried[id] = struct{}{}
+			}
+		}
+	}
+	return tried
 }
 
 func (m *Manager) executeCountMixedOnce(ctx context.Context, providers []string, req cliproxyexecutor.Request, opts cliproxyexecutor.Options, maxRetryCredentials int, retryRound int, defaultRequestRetry int) (cliproxyexecutor.Response, error) {
