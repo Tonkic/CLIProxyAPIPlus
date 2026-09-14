@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/router-for-me/CLIProxyAPI/v7/internal/interfaces"
 	"github.com/router-for-me/CLIProxyAPI/v7/internal/runtime/executor/helps"
@@ -14,6 +15,14 @@ import (
 	sdktranslator "github.com/router-for-me/CLIProxyAPI/v7/sdk/translator"
 	"golang.org/x/net/context"
 )
+
+type streamingTTFTTimeoutError struct{ timeout time.Duration }
+
+func (e *streamingTTFTTimeoutError) Error() string {
+	return fmt.Sprintf("upstream produced no streaming payload within %s", e.timeout)
+}
+
+func (*streamingTTFTTimeoutError) StatusCode() int { return http.StatusGatewayTimeout }
 
 // ExecuteStreamWithAuthManager executes a streaming request via the core auth manager.
 // This path is the only supported execution route.
@@ -358,7 +367,8 @@ func (h *BaseAPIHandler) executeStreamWithAuthManagerFormats(ctx context.Context
 		return nil, nil, errChan
 	}
 	ctx = enrichContextWithSessionHierarchy(ctx, opts.Headers, req.Payload, opts.Metadata)
-	streamResult, err := h.AuthManager.ExecuteStream(ctx, providers, req, opts)
+	attemptCtx, attemptCancel := context.WithCancel(ctx)
+	streamResult, err := h.AuthManager.ExecuteStream(attemptCtx, providers, req, opts)
 	if err != nil {
 		err = enrichAuthSelectionError(err, providers, normalizedModel)
 		errMsg := executionErrorMessage(err)
@@ -493,31 +503,47 @@ func (h *BaseAPIHandler) executeStreamWithAuthManagerFormats(ctx context.Context
 	var bootstrapHistoryChunks [][]byte
 	var bootstrapStreamErr error
 	var bootstrapErr *interfaces.ErrorMessage
+	ttftTimeout := StreamingTTFTTimeout(h.Cfg)
+	var ttftTimer *time.Timer
+	if ttftTimeout > 0 {
+		ttftTimer = time.NewTimer(ttftTimeout)
+	}
 	readInitialStreamChunks := func() {
 		for {
 			var chunk coreexecutor.StreamChunk
 			var ok bool
-			if ctx != nil {
-				select {
-				case <-ctx.Done():
-					streamCanceledBeforeRead = true
-					return
-				case chunk, ok = <-chunks:
-				}
-			} else {
-				chunk, ok = <-chunks
+			var timeoutC <-chan time.Time
+			if ttftTimer != nil {
+				timeoutC = ttftTimer.C
+			}
+			select {
+			case <-ctx.Done():
+				streamCanceledBeforeRead = true
+				attemptCancel()
+				return
+			case <-timeoutC:
+				bootstrapStreamErr = &streamingTTFTTimeoutError{timeout: ttftTimeout}
+				attemptCancel()
+				return
+			case chunk, ok = <-chunks:
 			}
 			if !ok {
+				attemptCancel()
 				streamClosedBeforeRead = true
 				applyStreamHeaderInit()
 				return
 			}
 			if chunk.Err != nil {
+				attemptCancel()
 				bootstrapStreamErr = chunk.Err
 				return
 			}
 			if len(chunk.Payload) == 0 {
 				continue
+			}
+			if ttftTimer != nil {
+				ttftTimer.Stop()
+				ttftTimer = nil
 			}
 			payload, deliverable, errMsg := transformStreamPayload(chunk.Payload, &bootstrapChunkIndex, bootstrapHistoryChunks)
 			if errMsg != nil {
@@ -560,7 +586,11 @@ func (h *BaseAPIHandler) executeStreamWithAuthManagerFormats(ctx context.Context
 			break
 		}
 		bootstrapRetries++
-		retryResult, retryErr := h.AuthManager.ExecuteStream(ctx, providers, req, opts)
+		attemptCtx, attemptCancel = context.WithCancel(ctx)
+		if ttftTimeout > 0 {
+			ttftTimer = time.NewTimer(ttftTimeout)
+		}
+		retryResult, retryErr := h.AuthManager.ExecuteStream(attemptCtx, providers, req, opts)
 		if retryErr != nil {
 			originalBootstrapErr := executionErrorMessage(bootstrapStreamErr)
 			if isAuthSelectionUnavailable(retryErr) && originalBootstrapErr.StatusCode >= http.StatusInternalServerError {
@@ -600,7 +630,9 @@ func (h *BaseAPIHandler) executeStreamWithAuthManagerFormats(ctx context.Context
 	dataChan := make(chan []byte)
 	errChan := make(chan *interfaces.ErrorMessage, 1)
 
-	go func() {
+	streamAttemptCancel := attemptCancel
+	go func(cancelAttempt context.CancelFunc) {
+		defer cancelAttempt()
 		completionOutcome := pluginapi.RequestCompletionSucceeded
 		completionStatus := http.StatusOK
 		var completionErr error
@@ -738,7 +770,7 @@ func (h *BaseAPIHandler) executeStreamWithAuthManagerFormats(ctx context.Context
 				historyChunks = appendStreamInterceptorHistory(historyChunks, payload)
 			}
 		}
-	}()
+	}(streamAttemptCancel)
 	return dataChan, upstreamHeaders, errChan
 }
 
