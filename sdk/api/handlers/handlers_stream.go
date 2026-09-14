@@ -24,6 +24,65 @@ func (e *streamingTTFTTimeoutError) Error() string {
 
 func (*streamingTTFTTimeoutError) StatusCode() int { return http.StatusGatewayTimeout }
 
+type streamExecutionAttempt struct {
+	result *coreexecutor.StreamResult
+	cancel context.CancelFunc
+	timer  *time.Timer
+}
+
+func (a *streamExecutionAttempt) stopTimer() {
+	if a.timer != nil {
+		a.timer.Stop()
+		a.timer = nil
+	}
+}
+func (a *streamExecutionAttempt) release() {
+	a.stopTimer()
+	if a.cancel != nil {
+		a.cancel()
+		a.cancel = nil
+	}
+}
+
+func executeStreamAttempt(ctx context.Context, timeout time.Duration, execute func(context.Context) (*coreexecutor.StreamResult, error)) (streamExecutionAttempt, error, bool) {
+	if timeout <= 0 {
+		r, err := execute(ctx)
+		return streamExecutionAttempt{result: r}, err, false
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	attemptCtx, cancel := context.WithCancel(ctx)
+	timer := time.NewTimer(timeout)
+	resultCh := make(chan struct {
+		r   *coreexecutor.StreamResult
+		err error
+	}, 1)
+	go func() {
+		r, err := execute(attemptCtx)
+		resultCh <- struct {
+			r   *coreexecutor.StreamResult
+			err error
+		}{r, err}
+	}()
+	select {
+	case v := <-resultCh:
+		timer.Stop()
+		if v.err != nil {
+			cancel()
+			return streamExecutionAttempt{}, v.err, false
+		}
+		return streamExecutionAttempt{result: v.r, cancel: cancel, timer: timer}, nil, false
+	case <-timer.C:
+		cancel()
+		return streamExecutionAttempt{}, &streamingTTFTTimeoutError{timeout: timeout}, false
+	case <-ctx.Done():
+		timer.Stop()
+		cancel()
+		return streamExecutionAttempt{}, ctx.Err(), true
+	}
+}
+
 // ExecuteStreamWithAuthManager executes a streaming request via the core auth manager.
 // This path is the only supported execution route.
 // The returned http.Header carries upstream response headers captured before streaming begins.
@@ -367,8 +426,18 @@ func (h *BaseAPIHandler) executeStreamWithAuthManagerFormats(ctx context.Context
 		return nil, nil, errChan
 	}
 	ctx = enrichContextWithSessionHierarchy(ctx, opts.Headers, req.Payload, opts.Metadata)
-	attemptCtx, attemptCancel := context.WithCancel(ctx)
-	streamResult, err := h.AuthManager.ExecuteStream(attemptCtx, providers, req, opts)
+	ttftTimeout := StreamingTTFTTimeout(h.Cfg)
+	attempt, err, streamCanceledBeforeExecute := executeStreamAttempt(ctx, ttftTimeout, func(attemptCtx context.Context) (*coreexecutor.StreamResult, error) {
+		return h.AuthManager.ExecuteStream(attemptCtx, providers, req, opts)
+	})
+	streamResult := attempt.result
+	attemptCancel := attempt.cancel
+	if attemptCancel == nil {
+		attemptCancel = func() {}
+	}
+	if streamCanceledBeforeExecute {
+		return nil, nil, nil
+	}
 	if err != nil {
 		err = enrichAuthSelectionError(err, providers, normalizedModel)
 		errMsg := executionErrorMessage(err)
@@ -503,7 +572,6 @@ func (h *BaseAPIHandler) executeStreamWithAuthManagerFormats(ctx context.Context
 	var bootstrapHistoryChunks [][]byte
 	var bootstrapStreamErr error
 	var bootstrapErr *interfaces.ErrorMessage
-	ttftTimeout := StreamingTTFTTimeout(h.Cfg)
 	var ttftTimer *time.Timer
 	if ttftTimeout > 0 {
 		ttftTimer = time.NewTimer(ttftTimeout)
@@ -586,11 +654,21 @@ func (h *BaseAPIHandler) executeStreamWithAuthManagerFormats(ctx context.Context
 			break
 		}
 		bootstrapRetries++
-		attemptCtx, attemptCancel = context.WithCancel(ctx)
-		if ttftTimeout > 0 {
-			ttftTimer = time.NewTimer(ttftTimeout)
+		retryAttempt, retryErr, retryCanceled := executeStreamAttempt(ctx, ttftTimeout, func(attemptCtx context.Context) (*coreexecutor.StreamResult, error) {
+			return h.AuthManager.ExecuteStream(attemptCtx, providers, req, opts)
+		})
+		if retryCanceled {
+			streamCanceledBeforeRead = true
+			break
 		}
-		retryResult, retryErr := h.AuthManager.ExecuteStream(attemptCtx, providers, req, opts)
+		retryResult := retryAttempt.result
+		attemptCancel = retryAttempt.cancel
+		if attemptCancel == nil {
+			attemptCancel = func() {}
+		}
+		if ttftTimeout > 0 {
+			ttftTimer = retryAttempt.timer
+		}
 		if retryErr != nil {
 			originalBootstrapErr := executionErrorMessage(bootstrapStreamErr)
 			if isAuthSelectionUnavailable(retryErr) && originalBootstrapErr.StatusCode >= http.StatusInternalServerError {
@@ -631,6 +709,9 @@ func (h *BaseAPIHandler) executeStreamWithAuthManagerFormats(ctx context.Context
 	errChan := make(chan *interfaces.ErrorMessage, 1)
 
 	streamAttemptCancel := attemptCancel
+	if streamAttemptCancel == nil {
+		streamAttemptCancel = func() {}
+	}
 	go func(cancelAttempt context.CancelFunc) {
 		defer cancelAttempt()
 		completionOutcome := pluginapi.RequestCompletionSucceeded
