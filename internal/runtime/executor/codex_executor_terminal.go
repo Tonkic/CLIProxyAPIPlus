@@ -451,13 +451,20 @@ var (
 )
 
 func nowCodexBootstrap() time.Time {
+	return codexBootstrapClock()()
+}
+
+// codexBootstrapClock snapshots the clock used by one bootstrap execution. Tests replace the
+// process-wide clock, so retaining the function value prevents a still-draining execution from
+// observing the next test's clock and firing its callback or deadline.
+func codexBootstrapClock() func() time.Time {
 	codexBootstrapNowMu.RLock()
 	fn := codexBootstrapNow
 	codexBootstrapNowMu.RUnlock()
 	if fn != nil {
-		return fn()
+		return fn
 	}
-	return time.Now()
+	return time.Now
 }
 
 func setCodexBootstrapNowForTest(fn func() time.Time) func() {

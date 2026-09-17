@@ -190,6 +190,9 @@ type Manager struct {
 	refreshLocks sync.Map
 	// persistLocks serializes disk persistence per auth ID and guards against out-of-order writes.
 	persistLocks sync.Map
+	// authConcurrency tracks standalone per-credential in-flight requests.
+	// Home-managed selections keep using Home's authoritative lease ledger.
+	authConcurrency sync.Map
 }
 
 // NewManager constructs a manager with optional custom selector and hook.

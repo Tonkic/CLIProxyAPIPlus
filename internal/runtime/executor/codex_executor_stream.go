@@ -145,9 +145,11 @@ func (e *CodexExecutor) ExecuteStream(ctx context.Context, auth *cliproxyauth.Au
 	buffering := e.cfg != nil && e.cfg.Codex.StreamBootstrapBuffering
 	var bootstrapTimeout time.Duration
 	var bootstrapStart time.Time
+	bootstrapNow := time.Now
 	if buffering {
+		bootstrapNow = codexBootstrapClock()
 		bootstrapTimeout = e.cfg.Codex.StreamBootstrapTimeoutDuration()
-		bootstrapStart = nowCodexBootstrap()
+		bootstrapStart = bootstrapNow()
 	}
 
 	scanner := bufio.NewScanner(httpResp.Body)
@@ -213,7 +215,7 @@ func (e *CodexExecutor) ExecuteStream(ctx context.Context, auth *cliproxyauth.Au
 					helps.RecordAPIResponseError(ctx, e.cfg, streamErr)
 					reporter.PublishFailure(ctx, streamErr)
 					if isCodexOverloadBootstrapFailure(terminalBody) {
-						timeSinceStart := nowCodexBootstrap().Sub(bootstrapStart)
+						timeSinceStart := bootstrapNow().Sub(bootstrapStart)
 						timeoutReached := bootstrapTimeout > 0 && timeSinceStart >= bootstrapTimeout
 						if !timeoutReached {
 							// Transient capacity rejection smuggled into an HTTP 200 stream. Fail the
@@ -281,7 +283,7 @@ func (e *CodexExecutor) ExecuteStream(ctx context.Context, auth *cliproxyauth.Au
 				for i := range chunks {
 					frameBytes += len(chunks[i])
 				}
-				timeSinceStart := nowCodexBootstrap().Sub(bootstrapStart)
+				timeSinceStart := bootstrapNow().Sub(bootstrapStart)
 				timeoutReached := bootstrapTimeout > 0 && timeSinceStart >= bootstrapTimeout
 				if !timeoutReached && bufferedFrames < codexBootstrapMaxBufferedFrames && bufferedBytes+frameBytes <= codexBootstrapMaxBufferedBytes {
 					bufferedFrames++

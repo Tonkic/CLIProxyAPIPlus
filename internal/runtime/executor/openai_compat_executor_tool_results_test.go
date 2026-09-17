@@ -24,8 +24,8 @@ func TestOpenAICompatExecutorToolResultContentByInputModalities(t *testing.T) {
 	}{
 		{name: "non-stream text-only", stream: false, inputModalities: []string{"text"}, wantString: true},
 		{name: "stream text-only", stream: true, inputModalities: []string{"text"}, wantString: true},
-		{name: "non-stream multimodal", stream: false, inputModalities: []string{"text", "image"}, wantString: true},
-		{name: "non-stream unspecified", stream: false, inputModalities: nil, wantString: true},
+		{name: "non-stream multimodal", stream: false, inputModalities: []string{"text", "image"}, wantString: false},
+		{name: "non-stream unspecified", stream: false, inputModalities: nil, wantString: false},
 	}
 
 	for _, tt := range tests {
@@ -89,7 +89,7 @@ func TestOpenAICompatExecutorToolResultContentByInputModalities(t *testing.T) {
 				if toolContent.Type != gjson.String {
 					t.Fatalf("tool content type = %s, want string; body=%s", toolContent.Type, string(gotBody))
 				}
-				want := "image inspected"
+				want := "image inspected\n\n[image omitted: unsupported by upstream]"
 				if toolContent.String() != want {
 					t.Fatalf("tool content = %q, want %q", toolContent.String(), want)
 				}

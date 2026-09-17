@@ -678,6 +678,12 @@ func TestCodexExecutor_BootstrapBuffering_ByteCapReleasesStream(t *testing.T) {
 	if result == nil {
 		t.Fatal("expected a stream result once the byte cap released the stream")
 	}
+	// Consume the released stream through the terminal overload event. Besides asserting that the
+	// byte cap really released before the overload arrived, this closes the response body so the
+	// httptest server can shut down cleanly on Windows.
+	if _, streamErr := drainChunks(result); streamErr == nil {
+		t.Fatal("expected the overload to arrive in-stream after the byte cap released the stream")
+	}
 }
 
 // Upstream interleaves keepalive heartbeats and item announcements while the model is still
@@ -1635,9 +1641,6 @@ func TestCodexExecutor_BootstrapBuffering_OverloadDirectlyAfterTimeoutDeliveredI
 }
 
 func TestCodexWebsocketsExecutor_BootstrapBuffering_OverloadDirectlyAfterTimeoutDeliveredInStream(t *testing.T) {
-	t0 := time.Date(2026, 9, 14, 12, 0, 0, 0, time.UTC)
-	clock := withMockClock(t, t0)
-
 	upgrader := websocket.Upgrader{CheckOrigin: func(*http.Request) bool { return true }}
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		conn, err := upgrader.Upgrade(w, r, nil)
@@ -1649,15 +1652,16 @@ func TestCodexWebsocketsExecutor_BootstrapBuffering_OverloadDirectlyAfterTimeout
 			return
 		}
 
-		// Advance clock past 10s timeout before writing any messages
-		clock.advance(11 * time.Second)
+		// Let the real clock pass the short bootstrap budget before writing any messages. Using the
+		// package-global mock clock here makes this websocket test race unrelated parallel tests.
+		time.Sleep(20 * time.Millisecond)
 
 		_ = conn.WriteMessage(websocket.TextMessage, []byte(codexOverloadEvent))
 	}))
 	defer server.Close()
 
 	req, opts := codexWebsocketRequest()
-	result, err := NewCodexWebsocketsExecutor(codexBufferingConfigWithTimeout(true, "10s")).ExecuteStream(context.Background(), codexTestAuth(server.URL), req, opts)
+	result, err := NewCodexWebsocketsExecutor(codexBufferingConfigWithTimeout(true, "5ms")).ExecuteStream(context.Background(), codexTestAuth(server.URL), req, opts)
 	if err != nil {
 		t.Fatalf("expected stream result without failover when overload arrives after timeout: %v", err)
 	}
@@ -1672,9 +1676,6 @@ func TestCodexWebsocketsExecutor_BootstrapBuffering_OverloadDirectlyAfterTimeout
 // When a status-bearing websocket error (e.g. status: 429) arrives after timeout, it must be
 // delivered in-stream rather than failing over.
 func TestCodexWebsocketsExecutor_BootstrapBuffering_StatusBearingErrorAfterTimeoutDeliveredInStream(t *testing.T) {
-	t0 := time.Date(2026, 9, 14, 12, 0, 0, 0, time.UTC)
-	clock := withMockClock(t, t0)
-
 	statusBearingError := `{"type":"error","status":429,"error":{"message":"Rate limit exceeded","type":"requests","code":"rate_limit_exceeded"}}`
 
 	upgrader := websocket.Upgrader{CheckOrigin: func(*http.Request) bool { return true }}
@@ -1688,15 +1689,15 @@ func TestCodexWebsocketsExecutor_BootstrapBuffering_StatusBearingErrorAfterTimeo
 			return
 		}
 
-		// Advance clock past 10s timeout before writing error frame
-		clock.advance(11 * time.Second)
+		// Let the real clock pass the short bootstrap budget before writing the error frame.
+		time.Sleep(20 * time.Millisecond)
 
 		_ = conn.WriteMessage(websocket.TextMessage, []byte(statusBearingError))
 	}))
 	defer server.Close()
 
 	req, opts := codexWebsocketRequest()
-	result, err := NewCodexWebsocketsExecutor(codexBufferingConfigWithTimeout(true, "10s")).ExecuteStream(context.Background(), codexTestAuth(server.URL), req, opts)
+	result, err := NewCodexWebsocketsExecutor(codexBufferingConfigWithTimeout(true, "5ms")).ExecuteStream(context.Background(), codexTestAuth(server.URL), req, opts)
 	if err != nil {
 		t.Fatalf("expected stream result without failover when status-bearing error arrives after timeout: %v", err)
 	}

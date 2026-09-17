@@ -690,6 +690,12 @@ func (h *OpenAIResponsesAPIHandler) ResponsesWebsocket(c *gin.Context) {
 			return nativeWebsocketPassthrough && requestRequiresCurrentUpstreamWebsocket && pinnedAuthAttempted &&
 				shouldReplayResponsesWebsocketPinnedAuthFailure(errMsg)
 		}
+		providerRouteAuthFailure := func(errMsg *interfaces.ErrorMessage) bool {
+			return routeOverridesModelResolution && errMsg != nil && coreauth.IsTerminalAuthError(errMsg.Error)
+		}
+		suppressForwardError := func(errMsg *interfaces.ErrorMessage) bool {
+			return replayPinnedAuthFailure(errMsg) || providerRouteAuthFailure(errMsg)
+		}
 
 		completedOutput, completedResponseID, completedPendingToolCallIDs, forwardErrMsg, errForward := h.forwardResponsesWebsocket(
 			c,
@@ -702,7 +708,7 @@ func (h *OpenAIResponsesAPIHandler) ResponsesWebsocket(c *gin.Context) {
 			responsesWebsocketForwardOptions{
 				preserveCompletionOutput: preserveNativeOutput.Load,
 				toolCacheTurn:            toolCacheTurn,
-				suppressError:            replayPinnedAuthFailure,
+				suppressError:            suppressForwardError,
 			},
 		)
 		if errForward != nil {
@@ -719,6 +725,11 @@ func (h *OpenAIResponsesAPIHandler) ResponsesWebsocket(c *gin.Context) {
 			return
 		}
 		if forwardErrMsg != nil {
+			if providerRouteAuthFailure(forwardErrMsg) {
+				wsTerminateErr = forwardErrMsg.Error
+				_, _ = writer.closeWithoutError()
+				return
+			}
 			if pinnedAuthAttempted && shouldReleaseResponsesWebsocketPinnedAuth(forwardErrMsg) {
 				forgetPinnedAuth()
 			}

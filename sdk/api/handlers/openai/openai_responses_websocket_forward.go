@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"sort"
@@ -281,9 +282,24 @@ func shouldReplayResponsesWebsocketPinnedAuthFailure(errMsg *interfaces.ErrorMes
 	switch responsesWebsocketErrorStatus(errMsg) {
 	case http.StatusUnauthorized, http.StatusTooManyRequests:
 		return true
-	default:
+	}
+	if errMsg == nil {
 		return false
 	}
+	// Terminal auth selection errors intentionally expose a generic 503 to normal clients, but
+	// WebSocket replay still needs the original upstream credential status. Walk the concrete
+	// unwrap chain instead of errors.As so an outer 503 cannot hide an inner 401/429.
+	for current := errMsg.Error; current != nil; current = errors.Unwrap(current) {
+		statusErr, ok := current.(interface{ StatusCode() int })
+		if !ok {
+			continue
+		}
+		switch statusErr.StatusCode() {
+		case http.StatusUnauthorized, http.StatusTooManyRequests:
+			return true
+		}
+	}
+	return false
 }
 
 func shouldReleaseResponsesWebsocketPinnedAuth(errMsg *interfaces.ErrorMessage) bool {

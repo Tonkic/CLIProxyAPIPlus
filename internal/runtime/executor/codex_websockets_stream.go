@@ -280,10 +280,12 @@ func (e *CodexWebsocketsExecutor) ExecuteStream(ctx context.Context, auth *clipr
 	buffering := e.cfg != nil && e.cfg.Codex.StreamBootstrapBuffering
 	var bootstrapTimeout time.Duration
 	var bootstrapStart time.Time
+	bootstrapNow := time.Now
 	var exhaustionLogged bool
 	if buffering {
+		bootstrapNow = codexBootstrapClock()
 		bootstrapTimeout = e.cfg.Codex.StreamBootstrapTimeoutDuration()
-		bootstrapStart = nowCodexBootstrap()
+		bootstrapStart = bootstrapNow()
 	}
 
 	claudeInputTokens := helps.NewClaudeInputTokenState(from, to, responseFormat, originalPayload)
@@ -344,7 +346,7 @@ func (e *CodexWebsocketsExecutor) ExecuteStream(ctx context.Context, auth *clipr
 			// this message has not been processed yet and dropping it would lose a token, or a
 			// terminal event, from the turn.
 			bufferedFrames++
-			timeSinceStart := nowCodexBootstrap().Sub(bootstrapStart)
+			timeSinceStart := bootstrapNow().Sub(bootstrapStart)
 			timeoutReached := bootstrapTimeout > 0 && timeSinceStart >= bootstrapTimeout
 			windowOpen := bufferedFrames <= codexBootstrapMaxBufferedFrames && !timeoutReached
 			if !windowOpen && !exhaustionLogged {
